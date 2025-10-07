@@ -1,0 +1,87 @@
+# -------------------------------
+# Python / General
+# -------------------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.so
+*.zip
+*.tar
+*.tar.gz
+*.egg-info/
+*.log
+*.out
+*.tmp
+*.swp
+.DS_Store
+.env
+.venv/
+venv/
+.envrc
+*.sqlite3
+
+# -------------------------------
+# Jupyter / Colab
+# -------------------------------
+.ipynb_checkpoints/
+.colab/
+*.ipynb_save
+*.ipynb_convert
+*.ipynb_*
+*.nbconvert.ipynb
+
+# -------------------------------
+# Model & Dataset Checkpoints
+# -------------------------------
+models/
+checkpoints/
+saved_models/
+output/
+runs/
+wandb/
+cache/
+*.ckpt
+*.pt
+*.bin
+*.h5
+*.onnx
+
+# -------------------------------
+# Hugging Face / Transformers cache
+# -------------------------------
+.huggingface/
+transformers_cache/
+~/.cache/huggingface/
+~/.cache/torch/
+
+# -------------------------------
+# Google Colab / Drive mounts
+# -------------------------------
+/content/drive/
+drive/
+MyDrive/
+gdrive/
+
+# -------------------------------
+# Data & Generated Artifacts
+# -------------------------------
+data/raw/
+data/interim/
+data/processed/
+*.csv
+*.tsv
+*.xlsx
+*.jsonl
+*.pkl
+*.npy
+*.npz
+
+# -------------------------------
+# OS / IDE Specific
+# -------------------------------
+*.bak
+Thumbs.db
+.idea/
+.vscode/
+*.iml
+*.code-workspace
