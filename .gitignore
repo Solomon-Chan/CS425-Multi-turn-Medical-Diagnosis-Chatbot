@@ -51,8 +51,12 @@ cache/
 # -------------------------------
 .huggingface/
 transformers_cache/
-~/.cache/huggingface/
-~/.cache/torch/
+.cache/
+.cache/huggingface/
+.cache/torch/
+**/.cache/
+**/.cache/huggingface/
+**/.cache/torch/
 
 # -------------------------------
 # Google Colab / Drive mounts
@@ -77,6 +81,53 @@ data/processed/
 *.npz
 
 # -------------------------------
+# Tokenizers (block committed tokenizers)
+# - Fast tokenizers single-file format
+# -------------------------------
+tokenizer.json
+tokenizer_config.json
+special_tokens_map.json
+added_tokens.json
+**/tokenizer.json
+**/tokenizer_config.json
+**/special_tokens_map.json
+**/added_tokens.json
+
+# -------------------------------
+# Tokenizers (legacy BPE/WordPiece)
+# -------------------------------
+vocab.json
+vocab.txt
+merges.txt
+**/vocab.json
+**/vocab.txt
+**/merges.txt
+
+# -------------------------------
+# Tokenizers (SentencePiece and other model files)
+# -------------------------------
+spiece.model
+sentencepiece.bpe.model
+tokenizer.model
+**/spiece.model
+**/sentencepiece.bpe.model
+**/tokenizer.model
+
+# -------------------------------
+# Tokenizer directories (any location)
+# -------------------------------
+tokenizer*/
+tokenizers*/
+**/tokenizer*/
+**/tokenizers*/
+
+# -------------------------------
+# Experiment trackers
+# -------------------------------
+mlruns/
+**/mlruns/
+
+# -------------------------------
 # OS / IDE Specific
 # -------------------------------
 *.bak
@@ -85,3 +136,4 @@ Thumbs.db
 .vscode/
 *.iml
 *.code-workspace
+.pytest_cache/

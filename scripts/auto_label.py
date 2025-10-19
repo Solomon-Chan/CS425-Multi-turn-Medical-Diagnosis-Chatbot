@@ -20,8 +20,10 @@ import os
 import re
 import sys
 from typing import List, Dict, Tuple, Optional
-
 import pandas as pd
+from collections import Counter
+import csv
+
 
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_root)
@@ -301,7 +303,8 @@ def extract_fuzzy_spans(
 def auto_label_sentences(
     csv_file: str,
     data_dir: str = DATA_DIR_DEFAULT,
-    max_sentences: int = None,
+    # edit max_sentences for total number of (positive) sentences for BIO tagging
+    max_sentences: int = 2000,
     fuzzy_cutoff: int = 90,
     fuzzy_max_ngram: int = 4,
 ) -> Tuple[str, str]:
@@ -309,31 +312,39 @@ def auto_label_sentences(
     Process CSV and write:
     - data/auto_labeled_sample.jsonl (ONLY sentences with spans)
     - data/unknown_spans.jsonl (sentences with no spans, plus suggestions)
+    - data/label_counts.csv (per-label span and sentence counts)
     """
     symptoms, synonyms = load_symptom_data(data_dir)
     synonyms = sanitize_synonyms(synonyms)
 
     labeled_file = os.path.join(data_dir, "auto_labeled_sample.jsonl")
     unknown_file = os.path.join(data_dir, "unknown_spans.jsonl")
+    counts_file = os.path.join(data_dir, "label_counts.csv")
+
+    os.makedirs(data_dir, exist_ok=True)
 
     chunk_size = 1000
     kept = 0
     labeled: List[dict] = []
     unknown: List[dict] = []
 
+    # NEW: per-label counts
+    span_counts: Counter = Counter()
+    sentence_counts: Counter = Counter()
+
     for chunk in pd.read_csv(csv_file, chunksize=chunk_size):
-        # comment out max_sentences check to auto-label full csv
-        # if kept >= max_sentences:
-        #     break
+        if max_sentences is not None and kept >= max_sentences: break  # keep disabled to label full CSV
+
         for _, row in chunk.iterrows():
-            if kept >= max_sentences:
-                break
+            if max_sentences is not None and kept >= max_sentences: break  # keep disabled to label full CSV
+
             # Restrict scope: Description and Patient only
             for col in ["Description", "Patient"]:
                 if col in row and pd.notna(row[col]):
                     text = str(row[col]).strip()
                     if not text or len(text) <= 10:
                         continue
+
                     # 1) exact
                     spans = extract_character_spans(text, symptoms, synonyms)
                     # 2) fuzzy fallback when no exact matches
@@ -347,41 +358,58 @@ def auto_label_sentences(
                         )
                     else:
                         suggestions = []
-                    if spans:
-                        labeled.append(
-                            {
-                                "text": text,
-                                "spans": spans,  # (start, end, canonical, confidence)
-                                "source_column": col,
-                                "row_index": int(getattr(row, "name", kept)),
-                            }
-                        )
-                        kept += 1
-                        if kept >= max_sentences:
-                            break
-                    else:
-                        unknown.append(
-                            {
-                                "text": text,
-                                "source_column": col,
-                                "row_index": int(getattr(row, "name", len(unknown))),
-                                "suggestions": suggestions,  # list of [label, score]
-                            }
-                        )
 
-    os.makedirs(data_dir, exist_ok=True)
+                    if spans:
+                        labeled.append({
+                            "text": text,
+                            "spans": spans,  # (start, end, canonical, confidence)
+                            "source_column": col,
+                            "row_index": int(getattr(row, "name", kept)),
+                        })
+                        kept += 1
+
+                        # NEW: update counts
+                        labels_in_sentence = {lab for (_, _, lab, _) in spans}
+                        for lab in labels_in_sentence:
+                            sentence_counts[lab] += 1
+                        for (_, _, lab, _) in spans:
+                            span_counts[lab] += 1
+                    else:
+                        unknown.append({
+                            "text": text,
+                            "source_column": col,
+                            "row_index": int(getattr(row, "name", len(unknown))),
+                            "suggestions": suggestions,  # list of [label, score]
+                        })
+
+    # Write outputs
     with open(labeled_file, "w", encoding="utf-8") as f:
         for entry in labeled:
             json.dump(entry, f, ensure_ascii=False)
             f.write("\n")
+
     with open(unknown_file, "w", encoding="utf-8") as f:
         for entry in unknown:
             json.dump(entry, f, ensure_ascii=False)
             f.write("\n")
 
+    # NEW: write per-label counts CSV
+    with open(counts_file, "w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["label", "span_count", "sentence_count"])
+        # sort by span_count desc, then sentence_count desc, then label
+        for lab in sorted(span_counts.keys(), key=lambda k: (-span_counts[k], -sentence_counts[k], k)):
+            writer.writerow([lab, span_counts[lab], sentence_counts[lab]])
+
     total_spans = sum(len(e["spans"]) for e in labeled)
+    covered_labels = set(span_counts.keys())
+    total_labels = len(symptoms)
     print(f"Kept sentences: {len(labeled)} | Total spans: {total_spans} | Unknown sentences: {len(unknown)}")
+    print(f"Label coverage: {len(covered_labels)}/{total_labels} canonical symptoms matched at least once")
+    print(f"Wrote per-label counts to: {counts_file}")
+
     return labeled_file, unknown_file
+
 
 def validate_spans(jsonl_file: str, num_examples: int = 5) -> None:
     """Print sample lines with inline highlighting and span tuples (start,end,label,conf)."""
