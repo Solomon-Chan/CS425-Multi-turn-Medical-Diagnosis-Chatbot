@@ -1,7 +1,8 @@
 """
 Medical Symptom Extractor (data-driven)
 
-- Loads canonical symptoms and synonyms from data/symptoms.json and data/synonyms.json
+- Loads canonical symptoms from data/symptoms.csv (preferred) or data/symptoms.json (fallback)
+- Loads synonyms from data/synonyms.json
 - Provides canonicalization and high-level extraction (no auto-labeling here)
 """
 
@@ -15,18 +16,46 @@ from typing import List, Dict, Tuple, Optional
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 SEVERITY_CSV = os.path.join(DATA_DIR, "Symptom-severity.csv")
+SYMPTOMS_CSV = os.path.join(DATA_DIR, "symptoms.csv")
+SYMPTOMS_JSON = os.path.join(DATA_DIR, "symptoms.json")
 
 
-def load_symptom_data(data_dir: str = DATA_DIR) -> Tuple[List[str], Dict[str, str]]:
+def load_symptom_data(data_dir: str = DATA_DIR, verbose: bool = False) -> Tuple[List[str], Dict[str, str]]:
     """
-    Load canonical symptoms and synonym mapping from JSON.
+    Load canonical symptoms from JSON (primary source), and synonyms from JSON.
+    
+    Args:
+        data_dir: Directory containing symptom data files
+        verbose: If True, print loading messages
+        
+    Returns:
+        Tuple of (symptom_list, synonym_map)
     """
-    symptoms_path = os.path.join(data_dir, "symptoms.json")
+    # Load symptoms from JSON (primary source)
+    symptoms_json_path = os.path.join(data_dir, "symptoms.json")
+    if os.path.exists(symptoms_json_path):
+        try:
+            with open(symptoms_json_path, "r", encoding="utf-8") as f:
+                symptom_list = json.load(f)
+            if verbose:
+                print(f"Loaded {len(symptom_list)} symptoms from {symptoms_json_path}")
+        except Exception as e:
+            raise FileNotFoundError(f"Could not load symptoms from JSON: {e}")
+    else:
+        raise FileNotFoundError(f"symptoms.json not found in {data_dir}")
+    
+    # Load synonyms from JSON
     synonyms_path = os.path.join(data_dir, "synonyms.json")
-    with open(symptoms_path, "r", encoding="utf-8") as f:
-        symptom_list = json.load(f)
-    with open(synonyms_path, "r", encoding="utf-8") as f:
-        synonym_map = json.load(f)
+    if not os.path.exists(synonyms_path):
+        if verbose:
+            print(f"Warning: synonyms.json not found in {data_dir}, using empty synonym map")
+        synonym_map = {}
+    else:
+        with open(synonyms_path, "r", encoding="utf-8") as f:
+            synonym_map = json.load(f)
+        if verbose:
+            print(f"Loaded {len(synonym_map)} synonyms from {synonyms_path}")
+    
     return symptom_list, synonym_map
 
 

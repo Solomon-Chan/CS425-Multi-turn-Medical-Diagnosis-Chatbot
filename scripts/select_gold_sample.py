@@ -163,7 +163,11 @@ def main(n: int = 150, seed: int = 42):
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     bio_file = BIO_ROOT / "train.jsonl"
-    silver_pos_file = BIO_ROOT / "auto_labeled_sample.jsonl"
+    # Auto-labeling writes to data/, so read from there
+    silver_pos_file = DATA_DIR / "auto_labeled_sample.jsonl"
+    if not silver_pos_file.exists():
+        # Fallback to bio_outputs if not in data/
+        silver_pos_file = BIO_ROOT / "auto_labeled_sample.jsonl"
     out_file = DATA_DIR / "validation_sample.jsonl"
 
     if not bio_file.exists():

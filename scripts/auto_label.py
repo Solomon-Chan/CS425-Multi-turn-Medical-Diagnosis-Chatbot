@@ -36,10 +36,35 @@ except Exception:
         return re.sub(r"\s+", " ", s.strip().lower())
 
     def load_symptom_data(data_dir: str):
-        with open(os.path.join(data_dir, "symptoms.json"), "r", encoding="utf-8") as f:
-            symptoms = json.load(f)
-        with open(os.path.join(data_dir, "synonyms.json"), "r", encoding="utf-8") as f:
-            synonyms = json.load(f)
+        """Fallback: Load symptoms from CSV (preferred) or JSON, and synonyms from JSON."""
+        symptoms = []
+        symptoms_csv_path = os.path.join(data_dir, "symptoms.csv")
+        symptoms_json_path = os.path.join(data_dir, "symptoms.json")
+        
+        # Try CSV first
+        if os.path.exists(symptoms_csv_path):
+            import csv
+            with open(symptoms_csv_path, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    symptom = row["symptoms"].strip()
+                    if symptom:
+                        symptoms.append(symptom)
+        # Fallback to JSON
+        elif os.path.exists(symptoms_json_path):
+            with open(symptoms_json_path, "r", encoding="utf-8") as f:
+                symptoms = json.load(f)
+        else:
+            raise FileNotFoundError(f"Neither symptoms.csv nor symptoms.json found in {data_dir}")
+        
+        # Load synonyms
+        synonyms_path = os.path.join(data_dir, "synonyms.json")
+        if os.path.exists(synonyms_path):
+            with open(synonyms_path, "r", encoding="utf-8") as f:
+                synonyms = json.load(f)
+        else:
+            synonyms = {}
+        
         return symptoms, synonyms
 
 # Fuzzy matching (RapidFuzz)

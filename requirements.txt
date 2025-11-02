@@ -1,0 +1,17 @@
+# Core ML and NLP libraries
+torch>=2.0.0
+transformers>=4.57.1
+numpy>=1.24.0
+
+# Data processing
+pandas>=2.0.0
+
+# Fuzzy matching for auto-labeling
+rapidfuzz>=3.0.0
+
+# NER evaluation metrics
+seqeval>=1.2.2
+
+# Optional but recommended
+scikit-learn>=1.3.0
+

@@ -2,45 +2,111 @@
 
 import json
 import torch
+import sys
+from pathlib import Path
 from seqeval.metrics import classification_report, precision_score, recall_score, f1_score
 from transformers import AutoTokenizer, AutoModelForTokenClassification
 
-LABEL_MAP = {0: "B-SYM", 1: "I-SYM", 2: "O"}
-ID2LABEL = {v: k for k, v in LABEL_MAP.items()}
+# Add project root to path
+project_root = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(project_root))
+import config
+
+LABEL_MAP = config.LABEL_MAP
+ID2LABEL = config.ID2LABEL
 
 def predict_tags(tokens, tokenizer, model):
-    # Rebuild sentence from tokens for model input
-    text = tokenizer.convert_tokens_to_string(tokens)
-    encodings = tokenizer(text, return_tensors="pt", truncation=True, max_length=128)
+    """Predict BIO tags by tokenizing with is_split_into_words=True so
+    labels align exactly to the provided `tokens` list.
+
+    This avoids reconstructing text and re-tokenizing differently than the
+    gold tokenization, which previously caused off-by-one and boundary
+    mismatches (no entity overlap).
+    """
+    # Tokenize the provided tokens as words so tokenizer.word_ids() maps pieces
+    encoded = tokenizer(tokens,
+                        is_split_into_words=True,
+                        return_tensors="pt",
+                        truncation=True,
+                        max_length=config.MAX_LENGTH,
+                        return_special_tokens_mask=True)
+
+    # Forward pass (only pass expected args)
     with torch.no_grad():
-        logits = model(**encodings).logits
-    pred_ids = torch.argmax(logits, dim=-1).squeeze().tolist()
-    # If batch_singlet, squeeze, else use [0]
-    if isinstance(pred_ids[0], list): # batch of len 1
+        outputs = model(input_ids=encoded['input_ids'], attention_mask=encoded['attention_mask'])
+    pred_ids = torch.argmax(outputs.logits, dim=-1).squeeze().tolist()
+    if isinstance(pred_ids[0], list):
         pred_ids = pred_ids[0]
-    model_tokens = tokenizer.tokenize(text)
-    # Align prediction length (may be off by special tokens)
-    offset = len(pred_ids) - len(model_tokens)
-    pred_ids = pred_ids[offset:]
-    pred_labels = [ID2LABEL.get(pid, "O") for pid in pred_ids]
-    # Truncate in case subword splits/merges, else pad
-    pred_labels = pred_labels[:len(tokens)] + ["O"] * (len(tokens) - len(pred_labels))
+
+    # Map model token predictions back to original word tokens using word_ids
+    word_ids = encoded.word_ids(batch_index=0)
+    pred_labels = []
+    previous_word_idx = None
+    for token_index, word_idx in enumerate(word_ids):
+        if word_idx is None:
+            continue
+        if word_idx != previous_word_idx:
+            label_id = pred_ids[token_index]
+            label = config.LABEL_MAP.get(label_id, "O")
+            # Fix invalid I- tags that appear without B- before
+            if label == "I-SYM" and (not pred_labels or pred_labels[-1] == "O"):
+                label = "B-SYM"
+            pred_labels.append(label)
+            previous_word_idx = word_idx
+
+    # Safety: ensure length matches original token list
+    if len(pred_labels) < len(tokens):
+        pred_labels.extend(["O"] * (len(tokens) - len(pred_labels)))
+    elif len(pred_labels) > len(tokens):
+        pred_labels = pred_labels[:len(tokens)]
+
     return pred_labels
 
 def main():
-    model_dir = "./biobert-ner"  # Update as needed
-    valid_path = "data/validation.jsonl"   # Gold validation file
-    pred_path = "data/validation_preds.jsonl"  # Your predicted tags with same structure
-    report_path = "reports/ner_eval.txt"
+    print("Starting NER evaluation...")
     
+    # Validate paths exist
+    print("Validating paths...")
+    config.validate_paths()
+    
+    model_dir = config.MODEL_PATH
+    print(f"Using model from: {model_dir}")
+    
+    # Try bio_outputs first since that's our original validation data
+    valid_path = config.BIO_OUTPUTS_DIR / "validation.jsonl"
+    if not valid_path.exists():
+        valid_path = config.DATA_DIR / "validation.jsonl"
+    print(f"Using validation data from: {valid_path}")
+    
+    if not valid_path.exists():
+        raise FileNotFoundError(f"Validation file not found at {valid_path}")
+
+    report_path = Path("reports") / "ner_eval.txt"
+    
+    # For storing all tokens for analysis
+    all_tokens = []
+    report_path = Path("reports") / "ner_eval.txt"
+    
+    if not valid_path.exists():
+        # Try bio_outputs as fallback
+        valid_path = config.BIO_OUTPUTS_DIR / "validation.jsonl"
+        if not valid_path.exists():
+            raise FileNotFoundError(f"Validation file not found. Checked {config.DATA_DIR / 'validation.jsonl'} and {config.BIO_OUTPUTS_DIR / 'validation.jsonl'}")
+    
+    # Always generate fresh predictions
+    print(f"Generating predictions using model from: {model_dir}")
     tokenizer = AutoTokenizer.from_pretrained(model_dir)
     model = AutoModelForTokenClassification.from_pretrained(model_dir)
     model.eval()
 
     true_tags = []
     pred_tags = []
-    with open(valid_path, "r", encoding="utf-8") as f:
+    
+    # Generate predictions on-the-fly
+    with open(str(valid_path), "r", encoding="utf-8") as f:
         for line in f:
+            if not line.strip():
+                continue
             x = json.loads(line)
             tokens = x["tokens"]
             gold = x["tags"] if "tags" in x else x["labels"]  # use whichever exists
@@ -52,22 +118,157 @@ def main():
                 pred += ["O"] * (len(tokens) - len(pred))
             true_tags.append(gold)
             pred_tags.append(pred)
-    # Compute metrics
-    report = classification_report(true_tags, pred_tags, digits=4)
+            all_tokens.append(tokens)  # Store tokens for analysis
+    # Print detailed debug info
+    print(f"\nProcessed {len(true_tags)} sentences")
+    print("\nDetailed Sample Analysis:")
+    for i, (tokens, gold, pred) in enumerate(zip(all_tokens[:3], true_tags[:3], pred_tags[:3])):
+        print(f"\nExample {i+1}:")
+        print("Text:", " ".join(tokens))
+        print("\nToken-by-Token Comparison:")
+        for t, g, p in zip(tokens, gold, pred):
+            if g != p:
+                print(f"Token: {t:15} Gold: {g:10} Pred: {p:10} {'[MISMATCH]' if g != p else ''}")
+        print("\nFull sequences:")
+        print("Gold:", gold)
+        print("Pred:", pred)
+        print("-" * 80)
+
+    # Analyze tag distributions
+    gold_tag_dist = {"B-SYM": 0, "I-SYM": 0, "O": 0}
+    pred_tag_dist = {"B-SYM": 0, "I-SYM": 0, "O": 0}
+    
+    for tags in true_tags:
+        for tag in tags:
+            gold_tag_dist[tag] = gold_tag_dist.get(tag, 0) + 1
+    
+    for tags in pred_tags:
+        for tag in tags:
+            pred_tag_dist[tag] = pred_tag_dist.get(tag, 0) + 1
+
+    print("\nTag Distribution Analysis:")
+    print("Gold Tags:", gold_tag_dist)
+    print("Pred Tags:", pred_tag_dist)
+    
+    # Count B-SYM tags and analyze patterns
+    gold_b_count = sum(1 for tags in true_tags for tag in tags if tag == "B-SYM")
+    pred_b_count = sum(1 for tags in pred_tags for tag in tags if tag == "B-SYM")
+    
+    # Analyze B-I-O patterns
+    print("\nB-I-O Pattern Analysis:")
+    invalid_gold = sum(1 for tags in true_tags for i, tag in enumerate(tags) 
+                      if tag == "I-SYM" and (i == 0 or tags[i-1] not in ["B-SYM", "I-SYM"]))
+    invalid_pred = sum(1 for tags in pred_tags for i, tag in enumerate(tags) 
+                      if tag == "I-SYM" and (i == 0 or tags[i-1] not in ["B-SYM", "I-SYM"]))
+    print(f"Number of B-SYM tags in gold: {gold_b_count}")
+    print(f"Number of B-SYM tags in predictions: {pred_b_count}")
+
+    # Convert BIO tag sequences to entity spans for entity-level diagnostics
+    def bio_to_entities(tags):
+        """Convert a list of BIO tags (e.g. B-SYM, I-SYM, O) to a list of entities.
+        Each entity is a tuple: (start_index, end_index_inclusive, label_type).
+        """
+        ents = []
+        i = 0
+        while i < len(tags):
+            tag = tags[i]
+            if tag.startswith("B-"):
+                label = tag.split("-", 1)[1]
+                start = i
+                j = i + 1
+                while j < len(tags) and tags[j] == f"I-{label}":
+                    j += 1
+                end = j - 1
+                ents.append((start, end, label))
+                i = j
+            else:
+                i += 1
+        return ents
+
+    total_gold_ents = 0
+    total_pred_ents = 0
+    tp = 0
+    fp = 0
+    fn = 0
+    sample_fp_examples = []
+    sample_fn_examples = []
+
+    for tokens, gold, pred in zip(all_tokens, true_tags, pred_tags):
+        gents = set(bio_to_entities(gold))
+        pents = set(bio_to_entities(pred))
+        total_gold_ents += len(gents)
+        total_pred_ents += len(pents)
+        tp += len(gents & pents)
+        fp += len(pents - gents)
+        fn += len(gents - pents)
+        # Collect some example mismatches for inspection
+        if len(sample_fp_examples) < 3 and len(pents - gents) > 0:
+            sample_fp_examples.append((tokens, gold, pred, list(pents - gents)))
+        if len(sample_fn_examples) < 3 and len(gents - pents) > 0:
+            sample_fn_examples.append((tokens, gold, pred, list(gents - pents)))
+
+    print("\nEntity-level diagnostics:")
+    print(f"Total gold entities : {total_gold_ents}")
+    print(f"Total pred entities : {total_pred_ents}")
+    print(f"True positives      : {tp}")
+    print(f"False positives     : {fp}")
+    print(f"False negatives     : {fn}")
+    if total_pred_ents > 0:
+        ent_precision = tp / total_pred_ents
+    else:
+        ent_precision = 0.0
+    if total_gold_ents > 0:
+        ent_recall = tp / total_gold_ents
+    else:
+        ent_recall = 0.0
+    if ent_precision + ent_recall > 0:
+        ent_f1 = 2 * ent_precision * ent_recall / (ent_precision + ent_recall)
+    else:
+        ent_f1 = 0.0
+    print(f"Entity Precision: {ent_precision:.4f}")
+    print(f"Entity Recall   : {ent_recall:.4f}")
+    print(f"Entity F1       : {ent_f1:.4f}")
+
+    # Show a few FP/FN examples
+    if sample_fp_examples:
+        print("\nSample false positives (predicted entity not in gold):")
+        for tokens, gold, pred, pents in sample_fp_examples:
+            print("Text:", " ".join(tokens))
+            print("Predicted extra entities:", pents)
+            print("Gold sequence:", gold)
+            print("Pred sequence:", pred)
+            print("-" * 60)
+    if sample_fn_examples:
+        print("\nSample false negatives (gold entity missed by model):")
+        for tokens, gold, pred, gents in sample_fn_examples:
+            print("Text:", " ".join(tokens))
+            print("Missed gold entities:", gents)
+            print("Gold sequence:", gold)
+            print("Pred sequence:", pred)
+            print("-" * 60)
+
+    # Compute metrics, keep classification_report for token-level view
+    report = classification_report(true_tags, pred_tags, digits=4, zero_division="warn")
+    print("\nEvaluation Report:")
     print(report)
-    print(f"Precision: {precision_score(true_tags, pred_tags):.4f}")
-    print(f"Recall   : {recall_score(true_tags, pred_tags):.4f}")
-    print(f"F1       : {f1_score(true_tags, pred_tags):.4f}")
+    
+    precision = precision_score(true_tags, pred_tags, zero_division="warn")
+    recall = recall_score(true_tags, pred_tags, zero_division="warn")
+    f1 = f1_score(true_tags, pred_tags, zero_division="warn")
+    
+    print(f"Precision: {precision:.4f}")
+    print(f"Recall   : {recall:.4f}")
+    print(f"F1       : {f1:.4f}")
 
     # Save report text
-    import os
-    os.makedirs(os.path.dirname(report_path), exist_ok=True)
-    with open(report_path, "w") as out:
-        out.write(report)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(str(report_path), "w") as out:
+        out.write("Evaluation Report:\n")
+        out.write(str(report))  # Convert report to string explicitly
         out.write("\n")
-        out.write(f"Precision: {precision_score(true_tags, pred_tags):.4f}\n")
-        out.write(f"Recall   : {recall_score(true_tags, pred_tags):.4f}\n")
-        out.write(f"F1       : {f1_score(true_tags, pred_tags):.4f}\n")
+        out.write(f"Precision: {precision:.4f}\n")
+        out.write(f"Recall   : {recall:.4f}\n")
+        out.write(f"F1       : {f1:.4f}\n")
 
 if __name__ == "__main__":
     main()
