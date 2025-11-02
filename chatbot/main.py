@@ -12,7 +12,7 @@ sys.path.insert(0, str(project_root))
 
 import config
 from scripts.infer_ner import load_model_and_tokenizer, predict
-from chatbot.symptom_extractor import load_symptom_data, get_symptom_severity
+from chatbot.symptom_extractor import load_symptom_data, get_symptom_severity, canonicalize_symptom
 
 
 def extract_symptom_phrases(token_label_pairs):
@@ -85,9 +85,9 @@ class MedicalChatbot:
         self.model.eval()
         
         # Load symptom data for validation and severity
-        self.symptoms, self.synonyms = load_symptom_data(config.DATA_DIR, verbose=True)
+        self.symptoms, self.synonyms = load_symptom_data(str(config.DATA_DIR), verbose=True)
         print(f"✓ Loaded model from {self.model_path}")
-        print(f"✓ Loaded {len(self.symptoms)} canonical symptoms from symptoms.csv")
+        print(f"✓ Loaded {len(self.symptoms)} canonical symptoms from data directory")
     
     def extract_symptoms(self, user_input):
         """
@@ -102,8 +102,40 @@ class MedicalChatbot:
         if not user_input or not user_input.strip():
             return []
         
-        symptoms = extract_symptoms_ner(user_input, self.tokenizer, self.model)
-        return symptoms
+        # Step 1: extract surface symptom phrases from NER
+        surface_symptoms = extract_symptoms_ner(user_input, self.tokenizer, self.model)
+
+        # Step 2: map each extracted phrase to a canonical symptom (if possible)
+        canonical_matches = []
+        seen = set()
+
+        # Precompute normalized canonical map for fast lookup
+        norm_to_canonical = {canonicalize_symptom(s): s for s in self.symptoms}
+
+        # Normalize synonyms map keys as well
+        norm_syn_map = {canonicalize_symptom(k): v for k, v in self.synonyms.items()}
+
+        for phrase in surface_symptoms:
+            norm = canonicalize_symptom(phrase)
+            canon = None
+            # Exact canonical match
+            if norm in norm_to_canonical:
+                canon = norm_to_canonical[norm]
+            # Synonym match
+            elif norm in norm_syn_map:
+                canon = norm_syn_map[norm]
+            else:
+                # As a fallback, try substring matching against canonical symptoms
+                for k_norm, canon_cand in norm_to_canonical.items():
+                    if k_norm in norm or norm in k_norm:
+                        canon = canon_cand
+                        break
+
+            if canon and canon not in seen:
+                canonical_matches.append(canon)
+                seen.add(canon)
+
+        return canonical_matches
     
     def analyze_symptoms(self, symptoms):
         """

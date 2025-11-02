@@ -1,12 +1,12 @@
 Evaluation Report:
               precision    recall  f1-score   support
 
-         SYM     0.5888    0.3387    0.4300       186
+         SYM     0.5888    0.4091    0.4828       154
 
-   micro avg     0.5888    0.3387    0.4300       186
-   macro avg     0.5888    0.3387    0.4300       186
-weighted avg     0.5888    0.3387    0.4300       186
+   micro avg     0.5888    0.4091    0.4828       154
+   macro avg     0.5888    0.4091    0.4828       154
+weighted avg     0.5888    0.4091    0.4828       154
 
 Precision: 0.5888
-Recall   : 0.3387
-F1       : 0.4300
+Recall   : 0.4091
+F1       : 0.4828

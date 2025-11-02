@@ -3,6 +3,7 @@
 import json
 import torch
 import sys
+import argparse
 from pathlib import Path
 from seqeval.metrics import classification_report, precision_score, recall_score, f1_score
 from transformers import AutoTokenizer, AutoModelForTokenClassification
@@ -63,6 +64,10 @@ def predict_tags(tokens, tokenizer, model):
     return pred_labels
 
 def main():
+    parser = argparse.ArgumentParser(description="Evaluate NER model with tokenizer-aligned gold tags")
+    parser.add_argument("--max-examples", type=int, default=None, help="Limit number of examples processed (for faster testing)")
+    args = parser.parse_args()
+
     print("Starting NER evaluation...")
     
     # Validate paths exist
@@ -102,23 +107,75 @@ def main():
     true_tags = []
     pred_tags = []
     
-    # Generate predictions on-the-fly
+    # Generate predictions on-the-fly; align gold to the SAME tokenizer encoding
     with open(str(valid_path), "r", encoding="utf-8") as f:
+        processed = 0
         for line in f:
             if not line.strip():
                 continue
+            if args.max_examples is not None and processed >= args.max_examples:
+                break
             x = json.loads(line)
             tokens = x["tokens"]
-            gold = x["tags"] if "tags" in x else x["labels"]  # use whichever exists
-            pred = predict_tags(tokens, tokenizer, model)
-            # Truncate to match tokens
-            if len(pred) > len(tokens):
-                pred = pred[:len(tokens)]
-            elif len(pred) < len(tokens):
-                pred += ["O"] * (len(tokens) - len(pred))
-            true_tags.append(gold)
-            pred_tags.append(pred)
+            gold = x["tags"] if "tags" in x else x.get("labels", ["O"] * len(tokens))
+
+            # Encode the token list as words so tokenizer.word_ids() maps to indices
+            encoded = tokenizer(tokens,
+                                is_split_into_words=True,
+                                return_tensors="pt",
+                                truncation=True,
+                                max_length=config.MAX_LENGTH,
+                                return_special_tokens_mask=True)
+
+            # Build gold labels aligned to the encoded word pieces
+            word_ids = encoded.word_ids(batch_index=0)
+            gold_aligned = []
+            prev_word_idx = None
+            for token_index, word_idx in enumerate(word_ids):
+                if word_idx is None:
+                    continue
+                if word_idx != prev_word_idx:
+                    # Use the gold label for that original token index
+                    lbl = gold[word_idx] if word_idx < len(gold) else "O"
+                    gold_aligned.append(lbl)
+                    prev_word_idx = word_idx
+
+            # Predict using the model on the exact same encoding
+            with torch.no_grad():
+                outputs = model(input_ids=encoded["input_ids"], attention_mask=encoded["attention_mask"])
+            pred_ids = torch.argmax(outputs.logits, dim=-1).squeeze().tolist()
+            if isinstance(pred_ids[0], list):
+                pred_ids = pred_ids[0]
+
+            # Map predictions back to original token indices using word_ids
+            pred_aligned = []
+            prev_word_idx = None
+            for token_index, word_idx in enumerate(word_ids):
+                if word_idx is None:
+                    continue
+                if word_idx != prev_word_idx:
+                    label_id = pred_ids[token_index]
+                    label = config.LABEL_MAP.get(label_id, "O")
+                    if label == "I-SYM" and (not pred_aligned or pred_aligned[-1] == "O"):
+                        label = "B-SYM"
+                    pred_aligned.append(label)
+                    prev_word_idx = word_idx
+
+            # Ensure alignment length equals original tokens length
+            if len(gold_aligned) < len(tokens):
+                gold_aligned.extend(["O"] * (len(tokens) - len(gold_aligned)))
+            elif len(gold_aligned) > len(tokens):
+                gold_aligned = gold_aligned[:len(tokens)]
+
+            if len(pred_aligned) < len(tokens):
+                pred_aligned.extend(["O"] * (len(tokens) - len(pred_aligned)))
+            elif len(pred_aligned) > len(tokens):
+                pred_aligned = pred_aligned[:len(tokens)]
+
+            true_tags.append(gold_aligned)
+            pred_tags.append(pred_aligned)
             all_tokens.append(tokens)  # Store tokens for analysis
+            processed += 1
     # Print detailed debug info
     print(f"\nProcessed {len(true_tags)} sentences")
     print("\nDetailed Sample Analysis:")

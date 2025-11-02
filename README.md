@@ -64,6 +64,18 @@ python tests/test_infer_ner.py
 python scripts/evaluate_ner.py
 ```
 
+
+- Quick test (recommended on CPU):
+	Runs the evaluation on a limited number of examples so you can iterate quickly.
+```bash
+python scripts/evaluate_ner.py --max-examples 50
+```
+
+Notes:
+- The evaluator now aligns gold labels to the model tokenizer before predicting, so subword boundaries are handled consistently.
+- On CPU the full validation run may be slow; use `--max-examples` to test quickly.
+
+If you want to reproduce Trainer-style evaluation (the same code used during fine-tuning), see `docs/EVALUATION.md` for a short guide.
 ## Project Structure
 
 - `models/biobert-ner/`: Fine-tuned BioBERT NER model
