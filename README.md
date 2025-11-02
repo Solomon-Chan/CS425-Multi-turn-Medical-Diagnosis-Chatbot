@@ -15,3 +15,11 @@ python scripts/auto_label.py -i data/ai-medical-chatbot.csv -d data -m 2000 --va
 
 <!-- Create gold set with 150 stratified entries and a printed summary of what was selected -->
 python scripts/select_gold_sample.py
+
+<!-- To test NER -->
+<!-- 
+    Update model_directory as needed for your file structure.
+    Change LABEL_MAP if your label ids are different. 
+-->
+python scripts/test_infer_ner.py
+
