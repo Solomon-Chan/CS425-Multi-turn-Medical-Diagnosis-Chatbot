@@ -28,20 +28,16 @@ async function sendChatMessage(chatId, message) {
   // Convert the response to a stream-like format that your frontend expects
   const stream = new ReadableStream({
     start(controller) {
-      // Simulate streaming by sending the response in chunks
       const text = data.response;
-      const chunks = text.match(/.{1,50}/g) || [text];
       
-      chunks.forEach((chunk, index) => {
-        setTimeout(() => {
-          controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ content: chunk })}\n\n`));
-          
-          if (index === chunks.length - 1) {
-            controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
-            controller.close();
-          }
-        }, index * 50);
-      });
+      // Send the entire text at once, preserving all formatting
+      controller.enqueue(
+        new TextEncoder().encode(`data: ${JSON.stringify({ content: text })}\n\n`)
+      );
+      controller.enqueue(
+        new TextEncoder().encode('data: [DONE]\n\n')
+      );
+      controller.close();
     }
   });
   

@@ -32,6 +32,7 @@ function Chatbot() {
 
       const stream = await api.sendChatMessage(chatIdOrNew, trimmedMessage);
       for await (const textChunk of parseSSEStream(stream)) {
+        console.log("CHUNK:", JSON.stringify(textChunk));
         setMessages(draft => {
           draft[draft.length - 1].content += textChunk;
         });

@@ -10,6 +10,8 @@ export async function* parseSSEStream(stream) {
   while (true) {
     const { done, value } = await sseReader.read();
     if (done) break;
+
+    console.log("hunk:", JSON.stringify(value));
     
     // Check for completion signal
     if (value.data === '[DONE]') break;

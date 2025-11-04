@@ -10,7 +10,9 @@ function ChatMessages({ messages, isLoading }) {
   return (
     <div ref={scrollContentRef} className='grow space-y-4'>
       {messages.map(({ role, content, loading, error }, idx) => (
-        <div key={idx} className={`flex items-start gap-4 py-4 px-3 rounded-xl ${role === 'user' ? 'bg-primary-blue/10' : ''}`}>
+        <div key={idx} 
+          className={`flex items-start gap-4 py-4 px-3 rounded-xl ${role === 'user' ? 'bg-primary-blue/10' : ''}`}
+        >
           {role === 'user' && (
             <img
               className='h-[26px] w-[26px] shrink-0'

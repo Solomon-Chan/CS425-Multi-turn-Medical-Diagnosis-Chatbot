@@ -11,7 +11,7 @@ from typing import Dict, List, Optional
 import asyncio
 import logging
 
-from stage1_rulebot_v2 import RuleBasedChatbot, run_script_mode_from_json
+from stage1_rulebot_v3 import RuleBasedChatbot, run_script_mode_from_json
 
 # Initialize FastAPI app
 app = FastAPI(title="Medical Chatbot API", version="1.0.0")
@@ -89,28 +89,19 @@ async def send_chat_message_stream(chat_id: str, request: Dict):
     bot = chat_session["bot"]
     
     async def generate():
-        # Process the message
         if bot.state.phase == "diagnose":
             response_text = bot.process_confirmation(message)
         else:
             response_text = bot.process_user_input(message)
-        
-        # Store bot response for history+
+
+        # Store bot response for history
         chat_session["messages"].append({"role": "assistant", "content": response_text})
-        
-        # Send as proper Server-Sent Events (SSE)
-        # Format: "data: {content}\n\n"
-        yield f"data: {json.dumps({'content': response_text})}\n\n"
+
+        # Split response logically on intended line breaks
+        for line in response_text.split("\n"):
+            yield f"data: {json.dumps({'content': line})}\n\n"
         yield "data: [DONE]\n\n"
-    
-    return StreamingResponse(
-        generate(), 
-        media_type="text/event-stream",
-        headers={
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
-        }
-    )
+
 
 @app.get("/chats/{chat_id}")
 async def get_chat_history(chat_id: str):
