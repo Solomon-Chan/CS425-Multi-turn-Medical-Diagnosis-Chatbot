@@ -1038,6 +1038,92 @@ def downsample_high_count_sentences(
     print(f"Updated counts:  {counts_path}")
     return auto_path, counts_path
 
+def deduplicate_symptoms_and_update_synonyms(
+    data_dir: str = DATA_DIR_DEFAULT,
+    csv_filename: str = "symptoms.csv",
+    json_filename: str = "symptoms.json",
+    synonyms_filename: str = "synonyms.json",
+    similarity_threshold: int = 90,
+) -> Tuple[str, str, str]:
+    """
+    Go through each symptom in symptoms.csv, map near-duplicates to an existing canonical symptom
+    if similarity >= threshold, update synonyms.json accordingly, and write de-duplicated
+    canonical list back to symptoms.csv and symptoms.json.
+    """
+    csv_path = os.path.join(data_dir, csv_filename)
+    json_path = os.path.join(data_dir, json_filename)
+    syn_path = os.path.join(data_dir, synonyms_filename)
+
+    # Load current symptoms (CSV primary) and existing synonyms
+    if not os.path.exists(csv_path):
+        raise FileNotFoundError(f"Missing {csv_filename} in {data_dir}")
+    
+    # Use csv module to handle commas within symptom names properly
+    raw_symptoms: List[str] = []
+    with open(csv_path, "r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        if "symptoms" not in reader.fieldnames:
+            raise ValueError("symptoms.csv must contain a 'symptoms' column")
+        for row in reader:
+            symptom = row["symptoms"].strip() if row["symptoms"] else ""
+            if symptom:
+                raw_symptoms.append(symptom)
+
+    if os.path.exists(syn_path):
+        with open(syn_path, "r", encoding="utf-8") as f:
+            synonym_map: Dict[str, str] = json.load(f)
+    else:
+        synonym_map = {}
+
+    canonical_list: List[str] = []
+    canonical_keys: List[str] = []  # normalized for matching
+
+    for phrase in raw_symptoms:
+        norm = canonicalize_symptom(phrase)
+        if not canonical_list:
+            canonical_list.append(phrase)
+            canonical_keys.append(norm)
+            continue
+        # Find best match among canonical keys
+        result = process.extractOne(norm, canonical_keys, scorer=fuzz.WRatio)
+        if result is None:
+            # No canonical yet
+            canonical_list.append(phrase)
+            canonical_keys.append(norm)
+            continue
+        best_key, score, idx = result
+        if score >= similarity_threshold:
+            # Treat as synonym of existing canonical
+            canonical = canonical_list[idx]
+            if phrase != canonical:
+                synonym_map[phrase] = canonical
+        else:
+            # Add as new canonical
+            canonical_list.append(phrase)
+            canonical_keys.append(norm)
+
+    # Sort canonicals for stability
+    canonical_list_sorted = sorted(set(canonical_list), key=lambda s: canonicalize_symptom(s))
+
+    # Write updated symptoms.csv (quote fields with commas)
+    with open(csv_path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["symptoms"])
+        for symptom in canonical_list_sorted:
+            writer.writerow([symptom])
+
+    # Write updated symptoms.json (mirror CSV)
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump(canonical_list_sorted, f, ensure_ascii=False, indent=2)
+
+    # Write updated synonyms.json
+    with open(syn_path, "w", encoding="utf-8") as f:
+        json.dump(synonym_map, f, ensure_ascii=False, indent=2)
+
+    print(f"Deduplicated symptoms -> {csv_path} and {json_path}")
+    print(f"Updated synonyms     -> {syn_path}")
+    return csv_path, json_path, syn_path
+
 def validate_spans(jsonl_file: str, num_examples: int = 5) -> None:
     """Print sample lines with inline highlighting and span tuples (start,end,label,conf)."""
     shown = 0
@@ -1081,6 +1167,7 @@ def main():
     parser.add_argument("--max-per-class", type=int, default=1000, help="Maximum per symptom (default: 1000)")
     parser.add_argument("--oversample-low-count", action="store_true", help="Oversample rare symptoms in data/auto_labeled.jsonl and update label_counts.csv")
     parser.add_argument("--downsample-high-count", action="store_true", help="Downsample frequent symptoms in data/auto_labeled.jsonl to <= max per class and update label_counts.csv")
+    parser.add_argument("--dedupe-symptoms", action="store_true", help="Deduplicate symptoms.csv against itself, update synonyms.json, and write unique symptoms to symptoms.csv and symptoms.json")
     args = parser.parse_args()
 
     if not os.path.exists(args.input):
@@ -1112,6 +1199,18 @@ def main():
         )
         print(f"Updated: {auto_path}")
         print(f"Counts:  {counts_path}")
+    elif args.dedupe_symptoms:
+        print("Deduplicating symptoms and updating synonyms...")
+        csv_path, json_path, syn_path = deduplicate_symptoms_and_update_synonyms(
+            data_dir=args.data_dir,
+            csv_filename="symptoms.csv",
+            json_filename="symptoms.json",
+            synonyms_filename="synonyms.json",
+            similarity_threshold=90,
+        )
+        print(f"Symptoms CSV:  {csv_path}")
+        print(f"Symptoms JSON: {json_path}")
+        print(f"Synonyms JSON: {syn_path}")
     elif args.make_datasets:
         print("Generating silver and gold datasets...")
         silver_path, counts_path, gold_path = generate_silver_and_gold(
