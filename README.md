@@ -33,9 +33,7 @@ python scripts/auto_label.py -i data/ai-medical-chatbot.csv -d data --fuzzy-cuto
 ```
 
 #### Auto-label with validation examples
-```bash
-python scripts/auto_label.py -i data/ai-medical-chatbot.csv -d data -m 2000 --validate -e 3
-```
+python scripts/auto_label.py --make-datasets --input data/ai-medical-chatbot.csv --data-dir data --min-per-class 900 --max-per-class 1000 --fuzzy-cutoff 90 --fuzzy-max-ngram 4
 
 #### Test auto-labeling with generated data
 ```bash

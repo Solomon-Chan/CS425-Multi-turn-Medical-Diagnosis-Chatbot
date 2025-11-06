@@ -244,11 +244,31 @@ def generate_token_spans(text: str) -> List[Tuple[str, int, int]]:
             i += 1
     return tokens
 
+def append_tail_filler(text: str) -> str:
+    """Append small filler at the end to preserve existing character span indices."""
+    fillers = [
+        "to be honest.",
+        "if that makes sense.",
+        "you know.",
+        "honestly.",
+        "kind of.",
+        "a bit.",
+        "for what it's worth.",
+        "these days.",
+        "lately.",
+        "right now.",
+    ]
+    # 70% chance to append a filler
+    if random.random() < 0.7:
+        return text.rstrip() + " " + random.choice(fillers)
+    return text
+
 def balance_labeled_sentences(
     labeled: List[dict],
     max_per_class: int = 1000,
     min_per_class: int = 900,
     random_seed: Optional[int] = 42,
+    use_augmentation: bool = True,
 ) -> List[dict]:
     """
     Balance labeled sentences by downsampling frequent classes and upsampling rare classes.
@@ -278,28 +298,35 @@ def balance_labeled_sentences(
         for label in labels_in_sentence:
             label_to_sentences[label].append(idx)
     
-    # Collect sentence indices that should be included (as list to allow duplicates for upsampling)
-    selected_indices: List[int] = []
+    # Start with all unique indices seen
+    kept_indices: Set[int] = set()
+    augmented_entries: List[dict] = []
     
     for label, sentence_indices in sorted(label_to_sentences.items()):
         count = len(sentence_indices)
-        
         if count > max_per_class:
-            # Downsample: randomly sample max_per_class sentences (no replacement)
-            sampled = random.sample(sentence_indices, max_per_class)
-            selected_indices.extend(sampled)
-        elif count < min_per_class:
-            # Upsample: sample with replacement to reach min_per_class
-            # This allows duplicates which is necessary for rare classes
-            sampled = random.choices(sentence_indices, k=min_per_class)
-            selected_indices.extend(sampled)
+            # Downsample
+            sampled = set(random.sample(sentence_indices, max_per_class))
+            kept_indices.update(sampled)
         else:
-            # Keep all sentences for labels within the target range
-            selected_indices.extend(sentence_indices)
+            kept_indices.update(sentence_indices)
+            if count < min_per_class and use_augmentation and sentence_indices:
+                need = min_per_class - count
+                # Create augmented copies to reach at least min_per_class
+                picks = random.choices(sentence_indices, k=need)
+                for idx in picks:
+                    base = labeled[idx]
+                    new_entry = {
+                        "text": append_tail_filler(base["text"]),
+                        "spans": base.get("spans", []),
+                        "source_column": base.get("source_column"),
+                        "row_index": base.get("row_index", idx),
+                        "augmented": True,
+                        "aug_label": label,
+                    }
+                    augmented_entries.append(new_entry)
     
-    # Build balanced list (may contain duplicates for upsampled classes)
-    # Preserve order by using original indices
-    balanced = [labeled[idx] for idx in selected_indices]
+    balanced = [labeled[idx] for idx in sorted(kept_indices)] + augmented_entries
     
     # Update counts after balancing
     balanced_counts = Counter()
@@ -529,6 +556,237 @@ def auto_label_sentences(
     return labeled_file, unknown_file
 
 
+def _primary_label_for_sentence(spans: List[Tuple[int, int, str, float]], label_order: List[str]) -> Optional[str]:
+    """Pick a primary label for multi-label sentences to simplify allocation.
+    Prefer the label with highest global order (frequency-based order provided)."""
+    if not spans:
+        return None
+    labels = {lab for (_, _, lab, _) in spans}
+    order_index = {lab: i for i, lab in enumerate(label_order)}
+    # smallest index means higher priority
+    chosen = sorted(labels, key=lambda x: order_index.get(x, 10**9))
+    return chosen[0] if chosen else None
+
+
+def generate_silver_and_gold(
+    csv_file: str,
+    data_dir: str = DATA_DIR_DEFAULT,
+    silver_pos_target: int = 50000,
+    silver_neg_target: int = 50000,
+    gold_pos_target: int = 5000,
+    gold_neg_target: int = 5000,
+    max_per_class: int = 1000,
+    min_per_class: int = 900,
+    fuzzy_cutoff: int = 90,
+    fuzzy_max_ngram: int = 4,
+) -> Tuple[str, str, str]:
+    """
+    Build silver set (50k pos/50k neg) with per-symptom 900-1000 targets (subject to total size),
+    and gold validation set (5k pos/5k neg) mirroring silver distribution.
+    """
+    symptoms, synonyms = load_symptom_data(data_dir)
+    synonyms = sanitize_synonyms(synonyms)
+
+    silver_file = os.path.join(data_dir, "auto_labeled.jsonl")
+    gold_file = os.path.join(data_dir, "validation.jsonl")
+    counts_file = os.path.join(data_dir, "label_counts.csv")
+
+    pos_entries: List[dict] = []
+    neg_entries: List[dict] = []
+
+    # Extract sentences until we hit silver_pos_target positives
+    for chunk in pd.read_csv(csv_file, chunksize=1000):
+        if len(pos_entries) >= silver_pos_target:
+            break
+        for _, row in chunk.iterrows():
+            if len(pos_entries) >= silver_pos_target:
+                break
+            for col in ["Description", "Patient"]:
+                if col in row and pd.notna(row[col]):
+                    text = str(row[col]).strip()
+                    if not text or len(text) <= 10:
+                        continue
+                    spans = extract_character_spans(text, symptoms, synonyms)
+                    suggestions: List[Tuple[str, int]] = []
+                    if not spans:
+                        spans, suggestions = extract_fuzzy_spans(
+                            text,
+                            symptoms,
+                            synonyms,
+                            score_cutoff=fuzzy_cutoff,
+                            max_ngram=fuzzy_max_ngram,
+                        )
+                    entry = {
+                        "text": text,
+                        "spans": spans,
+                        "source_column": col,
+                        "row_index": int(getattr(row, "name", len(pos_entries)+len(neg_entries))),
+                    }
+                    if spans:
+                        pos_entries.append(entry)
+                    else:
+                        neg_entries.append(entry)
+
+    # Compute initial per-label counts (sentence-level)
+    sentence_counts = Counter()
+    for e in pos_entries:
+        labels = {lab for (_, _, lab, _) in e.get("spans", [])}
+        for lab in labels:
+            sentence_counts[lab] += 1
+
+    # Determine label allocation within silver_pos_target budget
+    labels_sorted = [lab for lab, _ in sorted(sentence_counts.items(), key=lambda x: -x[1])]
+    allocation: Dict[str, int] = {}
+    remaining = silver_pos_target
+    for lab in labels_sorted:
+        base = sentence_counts[lab]
+        target = max(min(base, max_per_class), min_per_class) if base > 0 else 0
+        if target <= 0:
+            continue
+        take = min(target, remaining)
+        allocation[lab] = take
+        remaining -= take
+        if remaining <= 0:
+            break
+
+    # Bucket sentences by a primary label using the frequency order
+    buckets: Dict[str, List[int]] = defaultdict(list)
+    order = labels_sorted
+    for idx, e in enumerate(pos_entries):
+        plab = _primary_label_for_sentence(e.get("spans", []), order)
+        if plab is not None and plab in allocation:
+            buckets[plab].append(idx)
+
+    # Build balanced silver positives per allocation; augment tail to upsample
+    silver_pos: List[dict] = []
+    for lab, need in allocation.items():
+        pool = buckets.get(lab, [])
+        if not pool:
+            continue
+        if len(pool) >= need:
+            chosen = random.sample(pool, need)
+            silver_pos.extend(pos_entries[i] for i in chosen)
+        else:
+            # take all, then augment to reach need
+            silver_pos.extend(pos_entries[i] for i in pool)
+            deficit = need - len(pool)
+            picks = random.choices(pool, k=deficit)
+            for i in picks:
+                base = pos_entries[i]
+                silver_pos.append({
+                    "text": append_tail_filler(base["text"]),
+                    "spans": base.get("spans", []),
+                    "source_column": base.get("source_column"),
+                    "row_index": base.get("row_index", i),
+                    "augmented": True,
+                    "aug_label": lab,
+                })
+
+    # If still under target due to rounding/allocation gaps, top up from remaining frequent pools
+    if len(silver_pos) < silver_pos_target:
+        deficit = silver_pos_target - len(silver_pos)
+        flat_pool = [i for lab in allocation for i in buckets.get(lab, [])]
+        if flat_pool:
+            picks = random.choices(flat_pool, k=deficit)
+            for i in picks:
+                base = pos_entries[i]
+                silver_pos.append({
+                    "text": append_tail_filler(base["text"]),
+                    "spans": base.get("spans", []),
+                    "source_column": base.get("source_column"),
+                    "row_index": base.get("row_index", i),
+                    "augmented": True,
+                })
+    elif len(silver_pos) > silver_pos_target:
+        silver_pos = random.sample(silver_pos, silver_pos_target)
+
+    # Silver negatives: fill to target with replacement if needed
+    if len(neg_entries) < silver_neg_target:
+        deficit = silver_neg_target - len(neg_entries)
+        if neg_entries:
+            neg_entries.extend(random.choices(neg_entries, k=deficit))
+    elif len(neg_entries) > silver_neg_target:
+        neg_entries = random.sample(neg_entries, silver_neg_target)
+
+    # Recompute counts from silver_pos for output
+    span_counts = Counter()
+    sent_counts = Counter()
+    for e in silver_pos:
+        labels = {lab for (_, _, lab, _) in e.get("spans", [])}
+        for lab in labels:
+            sent_counts[lab] += 1
+        for (_, _, lab, _) in e.get("spans", []):
+            span_counts[lab] += 1
+
+    # Write silver set
+    with open(silver_file, "w", encoding="utf-8") as f:
+        for e in silver_pos:
+            json.dump(e, f, ensure_ascii=False)
+            f.write("\n")
+        for e in neg_entries:
+            # Ensure negatives have empty spans
+            out = dict(e)
+            out["spans"] = []
+            json.dump(out, f, ensure_ascii=False)
+            f.write("\n")
+
+    # Write counts
+    with open(counts_file, "w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["label", "span_count", "sentence_count"])
+        for lab in sorted(span_counts.keys(), key=lambda k: (-span_counts[k], -sent_counts[k], k)):
+            writer.writerow([lab, span_counts[lab], sent_counts[lab]])
+
+    # Build gold validation mirroring silver distribution (positives)
+    # Derive per-label proportions from silver_pos (sentence-level)
+    total_pos = len(silver_pos)
+    gold_allocation: Dict[str, int] = {}
+    for lab, cnt in sent_counts.items():
+        take = max(1, int(round(cnt / total_pos * gold_pos_target)))
+        gold_allocation[lab] = take
+    # Sample positives per label from silver_pos
+    silver_pos_by_label: Dict[str, List[int]] = defaultdict(list)
+    silver_pos_labels_order = [lab for lab, _ in sorted(sent_counts.items(), key=lambda x: -x[1])]
+    for idx, e in enumerate(silver_pos):
+        plab = _primary_label_for_sentence(e.get("spans", []), silver_pos_labels_order)
+        if plab is not None:
+            silver_pos_by_label[plab].append(idx)
+    gold_pos: List[dict] = []
+    for lab, need in gold_allocation.items():
+        pool = silver_pos_by_label.get(lab, [])
+        if pool:
+            if len(pool) >= need:
+                gold_pos.extend(silver_pos[i] for i in random.sample(pool, need))
+            else:
+                gold_pos.extend(silver_pos[i] for i in pool)
+                extra = need - len(pool)
+                gold_pos.extend(silver_pos[i] for i in random.choices(pool, k=extra))
+    if len(gold_pos) > gold_pos_target:
+        gold_pos = random.sample(gold_pos, gold_pos_target)
+    elif len(gold_pos) < gold_pos_target and gold_pos:
+        gold_pos.extend(random.choices(gold_pos, k=gold_pos_target - len(gold_pos)))
+
+    # Gold negatives: sample from silver negatives to 5k
+    gold_neg = random.sample(neg_entries, min(len(neg_entries), gold_neg_target)) if neg_entries else []
+    if len(gold_neg) < gold_neg_target and gold_neg:
+        gold_neg.extend(random.choices(gold_neg, k=gold_neg_target - len(gold_neg)))
+
+    # Write gold set
+    with open(gold_file, "w", encoding="utf-8") as f:
+        for e in gold_pos:
+            json.dump(e, f, ensure_ascii=False)
+            f.write("\n")
+        for e in gold_neg:
+            out = dict(e)
+            out["spans"] = []
+            json.dump(out, f, ensure_ascii=False)
+            f.write("\n")
+
+    print(f"Silver set -> {silver_file}: {len(silver_pos)} positives, {len(neg_entries)} negatives")
+    print(f"Gold set   -> {gold_file}: {len(gold_pos)} positives, {len(gold_neg)} negatives")
+    print(f"Counts     -> {counts_file}")
+    return silver_file, counts_file, gold_file
+
 def validate_spans(jsonl_file: str, num_examples: int = 5) -> None:
     """Print sample lines with inline highlighting and span tuples (start,end,label,conf)."""
     shown = 0
@@ -562,6 +820,14 @@ def main():
     parser.add_argument("--fuzzy-max-ngram", type=int, default=4, help="Max n-gram length (default: 4)")
     parser.add_argument("-v","--validate", action="store_true", help="Print validation examples")
     parser.add_argument("-e","--examples", type=int, default=3, help="Number of examples to print")
+    # New dataset generation flags
+    parser.add_argument("--make-datasets", action="store_true", help="Generate silver (50k/50k) and gold (5k/5k) sets")
+    parser.add_argument("--silver-pos", type=int, default=50000, help="Silver positives target (default: 50000)")
+    parser.add_argument("--silver-neg", type=int, default=50000, help="Silver negatives target (default: 50000)")
+    parser.add_argument("--gold-pos", type=int, default=5000, help="Gold positives target (default: 5000)")
+    parser.add_argument("--gold-neg", type=int, default=5000, help="Gold negatives target (default: 5000)")
+    parser.add_argument("--min-per-class", type=int, default=900, help="Minimum per symptom (default: 900)")
+    parser.add_argument("--max-per-class", type=int, default=1000, help="Maximum per symptom (default: 1000)")
     args = parser.parse_args()
 
     if not os.path.exists(args.input):
@@ -572,18 +838,36 @@ def main():
         if not os.path.exists(os.path.join(args.data_dir, name)):
             raise FileNotFoundError(f"Missing {name} in {args.data_dir}")
 
-    print("Running auto-label...")
-    labeled_path, unknown_path = auto_label_sentences(
-        args.input,
-        data_dir=args.data_dir,
-        max_sentences=args.max_sentences,
-        fuzzy_cutoff=args.fuzzy_cutoff,
-        fuzzy_max_ngram=args.fuzzy_max_ngram,
-    )
-    if args.validate:
-        validate_spans(labeled_path, num_examples=args.examples)
-    print(f"Saved labeled: {labeled_path}")
-    print(f"Saved unknown: {unknown_path}")
+    if args.make_datasets:
+        print("Generating silver and gold datasets...")
+        silver_path, counts_path, gold_path = generate_silver_and_gold(
+            args.input,
+            data_dir=args.data_dir,
+            silver_pos_target=args.silver_pos,
+            silver_neg_target=args.silver_neg,
+            gold_pos_target=args.gold_pos,
+            gold_neg_target=args.gold_neg,
+            max_per_class=args.max_per_class,
+            min_per_class=args.min_per_class,
+            fuzzy_cutoff=args.fuzzy_cutoff,
+            fuzzy_max_ngram=args.fuzzy_max_ngram,
+        )
+        print(f"Silver: {silver_path}")
+        print(f"Counts: {counts_path}")
+        print(f"Gold:   {gold_path}")
+    else:
+        print("Running auto-label...")
+        labeled_path, unknown_path = auto_label_sentences(
+            args.input,
+            data_dir=args.data_dir,
+            max_sentences=args.max_sentences,
+            fuzzy_cutoff=args.fuzzy_cutoff,
+            fuzzy_max_ngram=args.fuzzy_max_ngram,
+        )
+        if args.validate:
+            validate_spans(labeled_path, num_examples=args.examples)
+        print(f"Saved labeled: {labeled_path}")
+        print(f"Saved unknown: {unknown_path}")
 
 if __name__ == "__main__":
     main()
