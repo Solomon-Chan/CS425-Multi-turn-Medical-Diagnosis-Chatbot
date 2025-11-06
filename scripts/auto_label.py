@@ -787,6 +787,257 @@ def generate_silver_and_gold(
     print(f"Counts     -> {counts_file}")
     return silver_file, counts_file, gold_file
 
+def oversample_low_count_sentences(
+    data_dir: str = DATA_DIR_DEFAULT,
+    auto_labeled_filename: str = "auto_labeled.jsonl",
+    counts_filename: str = "label_counts.csv",
+    min_per_class: int = 900,
+    max_per_class: int = 1000,
+    random_seed: Optional[int] = 42,
+) -> Tuple[str, str]:
+    """
+    Oversample positive sentences for symptoms with low counts in data/auto_labeled.jsonl
+    using safe tail-only grammar/phrase perturbations, then update label_counts.csv.
+
+    - Only positives (entries with non-empty spans) are considered for symptom counts.
+    - For each label with sentence_count < min_per_class, duplicate sentences with that label
+      using light tail-only fillers to avoid breaking character offsets.
+    - Does not downsample labels > max_per_class (non-destructive).
+    """
+    if random_seed is not None:
+        random.seed(random_seed)
+
+    auto_path = os.path.join(data_dir, auto_labeled_filename)
+    counts_path = os.path.join(data_dir, counts_filename)
+
+    # Read existing dataset
+    entries: List[dict] = []
+    with open(auto_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            entries.append(json.loads(line))
+
+    # Split positives/negatives
+    pos_indices: List[int] = []
+    neg_indices: List[int] = []
+    for i, e in enumerate(entries):
+        spans = e.get("spans", [])
+        if spans:
+            pos_indices.append(i)
+        else:
+            neg_indices.append(i)
+
+    # Compute sentence counts per label on positives
+    sentence_counts: Counter = Counter()
+    for i in pos_indices:
+        e = entries[i]
+        labels = {lab for (_, _, lab, _) in e.get("spans", [])}
+        for lab in labels:
+            sentence_counts[lab] += 1
+
+    # Map label -> indices of positive entries containing that label
+    label_to_pos_indices: Dict[str, List[int]] = defaultdict(list)
+    for i in pos_indices:
+        e = entries[i]
+        labels = {lab for (_, _, lab, _) in e.get("spans", [])}
+        for lab in labels:
+            label_to_pos_indices[lab].append(i)
+
+    # Augment to lift underrepresented labels up to min_per_class (capped by max_per_class)
+    augmented: List[dict] = []
+    for lab, count in sentence_counts.items():
+        target = min_per_class
+        cap = max_per_class
+        if count >= target:
+            continue
+        pool = label_to_pos_indices.get(lab, [])
+        if not pool:
+            continue
+        need = min(cap, target) - count
+        if need <= 0:
+            continue
+        picks = random.choices(pool, k=need)
+        for idx in picks:
+            base = entries[idx]
+            augmented.append({
+                "text": append_tail_filler(base.get("text", "")),
+                "spans": base.get("spans", []),
+                "source_column": base.get("source_column"),
+                "row_index": base.get("row_index", idx),
+                "augmented": True,
+                "aug_label": lab,
+            })
+
+    if augmented:
+        entries.extend(augmented)
+
+    # Recompute counts (span and sentence) on positives only
+    span_counts: Counter = Counter()
+    sent_counts: Counter = Counter()
+    for e in entries:
+        spans = e.get("spans", [])
+        if not spans:
+            continue
+        labels = {lab for (_, _, lab, _) in spans}
+        for lab in labels:
+            sent_counts[lab] += 1
+        for (_, _, lab, _) in spans:
+            span_counts[lab] += 1
+
+    # Write updated dataset back
+    with open(auto_path, "w", encoding="utf-8") as f:
+        for e in entries:
+            json.dump(e, f, ensure_ascii=False)
+            f.write("\n")
+
+    # Write updated counts
+    with open(counts_path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["label", "span_count", "sentence_count"])
+        for lab in sorted(span_counts.keys(), key=lambda k: (-span_counts[k], -sent_counts[k], k)):
+            writer.writerow([lab, span_counts[lab], sent_counts[lab]])
+
+    print(f"Oversampled {len(augmented)} new positive entries for low-count symptoms.")
+    print(f"Updated dataset: {auto_path}")
+    print(f"Updated counts:  {counts_path}")
+    return auto_path, counts_path
+
+def downsample_high_count_sentences(
+    data_dir: str = DATA_DIR_DEFAULT,
+    auto_labeled_filename: str = "auto_labeled.jsonl",
+    counts_filename: str = "label_counts.csv",
+    max_per_class: int = 1000,
+    random_seed: Optional[int] = 42,
+) -> Tuple[str, str]:
+    """
+    Downsample positives in data/auto_labeled.jsonl so that per-symptom sentence counts
+    do not exceed max_per_class. Negatives are preserved as-is.
+
+    Strategy:
+      1) Primary-label bucketing by frequency order and cap each bucket to max_per_class.
+      2) Second pass: enforce caps for any label still exceeding the threshold by removing
+         additional positives that contain the label (randomly), until all are <= max.
+    """
+    if random_seed is not None:
+        random.seed(random_seed)
+
+    auto_path = os.path.join(data_dir, auto_labeled_filename)
+    counts_path = os.path.join(data_dir, counts_filename)
+
+    # Read dataset
+    entries: List[dict] = []
+    with open(auto_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            entries.append(json.loads(line))
+
+    # Split indices
+    pos_indices: List[int] = []
+    neg_indices: List[int] = []
+    for i, e in enumerate(entries):
+        if e.get("spans", []):
+            pos_indices.append(i)
+        else:
+            neg_indices.append(i)
+
+    # Initial sentence counts
+    sentence_counts = Counter()
+    for i in pos_indices:
+        labs = {lab for (_, _, lab, _) in entries[i].get("spans", [])}
+        for lab in labs:
+            sentence_counts[lab] += 1
+
+    # Buckets by primary label
+    label_order = [lab for lab, _ in sorted(sentence_counts.items(), key=lambda x: -x[1])]
+    buckets: Dict[str, List[int]] = defaultdict(list)
+    for i in pos_indices:
+        plab = _primary_label_for_sentence(entries[i].get("spans", []), label_order)
+        if plab is not None:
+            buckets[plab].append(i)
+
+    # First pass: cap by bucket
+    keep_set: Set[int] = set()
+    for lab, idxs in buckets.items():
+        if len(idxs) <= max_per_class:
+            keep_set.update(idxs)
+        else:
+            keep_set.update(random.sample(idxs, max_per_class))
+
+    # Add negatives
+    keep_set.update(neg_indices)
+
+    # Provisional filtered entries
+    filtered_entries = [e for j, e in enumerate(entries) if j in keep_set]
+
+    # Second pass: enforce caps globally
+    # Build mapping from label to indices in filtered_entries
+    filt_pos_indices: List[int] = []
+    label_to_indices: Dict[str, List[int]] = defaultdict(list)
+    for j, e in enumerate(filtered_entries):
+        spans = e.get("spans", [])
+        if not spans:
+            continue
+        filt_pos_indices.append(j)
+        labs = {lab for (_, _, lab, _) in spans}
+        for lab in labs:
+            label_to_indices[lab].append(j)
+
+    # Compute counts
+    filt_counts = Counter()
+    for lab, idxs in label_to_indices.items():
+        filt_counts[lab] = len(idxs)
+
+    # Determine drops needed per label
+    drop_set: Set[int] = set()
+    for lab, cnt in sorted(filt_counts.items(), key=lambda x: -x[1]):
+        if cnt <= max_per_class:
+            continue
+        excess = cnt - max_per_class
+        pool = [j for j in label_to_indices.get(lab, []) if j not in drop_set]
+        if pool:
+            drop = set(random.sample(pool, min(excess, len(pool))))
+            drop_set.update(drop)
+
+    if drop_set:
+        final_entries = [e for j, e in enumerate(filtered_entries) if j not in drop_set]
+    else:
+        final_entries = filtered_entries
+
+    # Recompute counts for output (positives only)
+    span_counts = Counter()
+    sent_counts = Counter()
+    for e in final_entries:
+        spans = e.get("spans", [])
+        if not spans:
+            continue
+        labs = {lab for (_, _, lab, _) in spans}
+        for lab in labs:
+            sent_counts[lab] += 1
+        for (_, _, lab, _) in spans:
+            span_counts[lab] += 1
+
+    # Write updated dataset
+    with open(auto_path, "w", encoding="utf-8") as f:
+        for e in final_entries:
+            json.dump(e, f, ensure_ascii=False)
+            f.write("\n")
+
+    # Write updated counts
+    with open(counts_path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["label", "span_count", "sentence_count"])
+        for lab in sorted(span_counts.keys(), key=lambda k: (-span_counts[k], -sent_counts[k], k)):
+            writer.writerow([lab, span_counts[lab], sent_counts[lab]])
+
+    print(f"Downsampled positives to enforce <= {max_per_class} per symptom.")
+    print(f"Updated dataset: {auto_path}")
+    print(f"Updated counts:  {counts_path}")
+    return auto_path, counts_path
+
 def validate_spans(jsonl_file: str, num_examples: int = 5) -> None:
     """Print sample lines with inline highlighting and span tuples (start,end,label,conf)."""
     shown = 0
@@ -828,6 +1079,8 @@ def main():
     parser.add_argument("--gold-neg", type=int, default=5000, help="Gold negatives target (default: 5000)")
     parser.add_argument("--min-per-class", type=int, default=900, help="Minimum per symptom (default: 900)")
     parser.add_argument("--max-per-class", type=int, default=1000, help="Maximum per symptom (default: 1000)")
+    parser.add_argument("--oversample-low-count", action="store_true", help="Oversample rare symptoms in data/auto_labeled.jsonl and update label_counts.csv")
+    parser.add_argument("--downsample-high-count", action="store_true", help="Downsample frequent symptoms in data/auto_labeled.jsonl to <= max per class and update label_counts.csv")
     args = parser.parse_args()
 
     if not os.path.exists(args.input):
@@ -838,7 +1091,28 @@ def main():
         if not os.path.exists(os.path.join(args.data_dir, name)):
             raise FileNotFoundError(f"Missing {name} in {args.data_dir}")
 
-    if args.make_datasets:
+    if args.oversample_low_count:
+        print("Oversampling low-count symptoms in existing silver set...")
+        auto_path, counts_path = oversample_low_count_sentences(
+            data_dir=args.data_dir,
+            auto_labeled_filename="auto_labeled.jsonl",
+            counts_filename="label_counts.csv",
+            min_per_class=args.min_per_class,
+            max_per_class=args.max_per_class,
+        )
+        print(f"Updated: {auto_path}")
+        print(f"Counts:  {counts_path}")
+    elif args.downsample_high_count:
+        print("Downsampling high-count symptoms in existing silver set...")
+        auto_path, counts_path = downsample_high_count_sentences(
+            data_dir=args.data_dir,
+            auto_labeled_filename="auto_labeled.jsonl",
+            counts_filename="label_counts.csv",
+            max_per_class=args.max_per_class,
+        )
+        print(f"Updated: {auto_path}")
+        print(f"Counts:  {counts_path}")
+    elif args.make_datasets:
         print("Generating silver and gold datasets...")
         silver_path, counts_path, gold_path = generate_silver_and_gold(
             args.input,
