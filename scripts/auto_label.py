@@ -19,10 +19,11 @@ import json
 import os
 import re
 import sys
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, Set
 import pandas as pd
-from collections import Counter
+from collections import Counter, defaultdict
 import csv
+import random
 
 
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -243,6 +244,79 @@ def generate_token_spans(text: str) -> List[Tuple[str, int, int]]:
             i += 1
     return tokens
 
+def balance_labeled_sentences(
+    labeled: List[dict],
+    max_per_class: int = 1000,
+    min_per_class: int = 900,
+    random_seed: Optional[int] = 42,
+) -> List[dict]:
+    """
+    Balance labeled sentences by downsampling frequent classes and upsampling rare classes.
+    
+    Args:
+        labeled: List of labeled sentence dictionaries with 'spans' field
+        max_per_class: Maximum number of sentences per label (downsample cap)
+        min_per_class: Minimum number of sentences per label (upsample target)
+        random_seed: Random seed for reproducibility
+    
+    Returns:
+        Balanced list of labeled sentences (may contain duplicates for upsampled classes)
+    """
+    if random_seed is not None:
+        random.seed(random_seed)
+    
+    if not labeled:
+        return labeled
+    
+    # Build label -> sentence indices mapping
+    label_to_sentences: Dict[str, List[int]] = defaultdict(list)
+    
+    for idx, entry in enumerate(labeled):
+        spans = entry.get("spans", [])
+        # Extract unique labels from this sentence
+        labels_in_sentence = {lab for (_, _, lab, _) in spans}
+        for label in labels_in_sentence:
+            label_to_sentences[label].append(idx)
+    
+    # Collect sentence indices that should be included (as list to allow duplicates for upsampling)
+    selected_indices: List[int] = []
+    
+    for label, sentence_indices in sorted(label_to_sentences.items()):
+        count = len(sentence_indices)
+        
+        if count > max_per_class:
+            # Downsample: randomly sample max_per_class sentences (no replacement)
+            sampled = random.sample(sentence_indices, max_per_class)
+            selected_indices.extend(sampled)
+        elif count < min_per_class:
+            # Upsample: sample with replacement to reach min_per_class
+            # This allows duplicates which is necessary for rare classes
+            sampled = random.choices(sentence_indices, k=min_per_class)
+            selected_indices.extend(sampled)
+        else:
+            # Keep all sentences for labels within the target range
+            selected_indices.extend(sentence_indices)
+    
+    # Build balanced list (may contain duplicates for upsampled classes)
+    # Preserve order by using original indices
+    balanced = [labeled[idx] for idx in selected_indices]
+    
+    # Update counts after balancing
+    balanced_counts = Counter()
+    for entry in balanced:
+        spans = entry.get("spans", [])
+        labels_in_sentence = {lab for (_, _, lab, _) in spans}
+        for label in labels_in_sentence:
+            balanced_counts[label] += 1
+    
+    print(f"Balancing: {len(labeled)} -> {len(balanced)} sentences")
+    print(f"Label distribution after balancing (target: {min_per_class}-{max_per_class} per label):")
+    for label, count in sorted(balanced_counts.items(), key=lambda x: -x[1])[:10]:
+        status = "✓" if min_per_class <= count <= max_per_class else "⚠"
+        print(f"  {status} {label}: {count} sentences")
+    
+    return balanced
+
 def extract_fuzzy_spans(
     text: str,
     symptom_list: List[str],
@@ -407,6 +481,25 @@ def auto_label_sentences(
                             "suggestions": suggestions,  # list of [label, score]
                         })
 
+    # Balance labeled sentences: downsample frequent classes, upsample rare classes
+    labeled = balance_labeled_sentences(
+        labeled,
+        max_per_class=1000,  # Cap frequent classes like fever at 1000 instances
+        min_per_class=900,   # Upsample rare symptoms to at least 900 instances
+        random_seed=42,
+    )
+
+    # Recompute counts after balancing
+    span_counts = Counter()
+    sentence_counts = Counter()
+    for entry in labeled:
+        spans = entry.get("spans", [])
+        labels_in_sentence = {lab for (_, _, lab, _) in spans}
+        for lab in labels_in_sentence:
+            sentence_counts[lab] += 1
+        for (_, _, lab, _) in spans:
+            span_counts[lab] += 1
+
     # Write outputs
     with open(labeled_file, "w", encoding="utf-8") as f:
         for entry in labeled:
@@ -418,7 +511,7 @@ def auto_label_sentences(
             json.dump(entry, f, ensure_ascii=False)
             f.write("\n")
 
-    # NEW: write per-label counts CSV
+    # NEW: write per-label counts CSV (after balancing)
     with open(counts_file, "w", encoding="utf-8", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["label", "span_count", "sentence_count"])
