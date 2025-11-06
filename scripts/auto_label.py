@@ -24,6 +24,7 @@ import pandas as pd
 from collections import Counter, defaultdict
 import csv
 import random
+import io
 
 
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -104,6 +105,32 @@ BANNED_SINGLE_TOKEN = {
 SAFE_SINGLE_TOKEN = {
     "migraine","wheezing","coryza","jaundice","pimples","obese","vertigo","hemoptysis","lacrimation"
 }
+
+def _load_json_relaxed(path: str) -> Dict[str, str]:
+    """Load JSON and auto-fix common format issues (like trailing commas).
+    If fixing is needed, the corrected JSON is written back to the same path.
+    """
+    if not os.path.exists(path):
+        return {}
+    with open(path, "r", encoding="utf-8") as f:
+        raw = f.read()
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        # Remove trailing commas before } or ]
+        fixed = re.sub(r",\s*([}\]])", r"\1", raw)
+        # Collapse duplicate commas
+        fixed = re.sub(r",\s*,+", ",", fixed)
+        try:
+            data = json.loads(fixed)
+            # Write back the fixed JSON for future runs
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            return data
+        except json.JSONDecodeError:
+            # If still invalid, fall back to empty map but warn
+            print(f"Warning: Could not parse JSON in {path}; proceeding with empty synonyms.")
+            return {}
 
 def sanitize_synonyms(syn_map: Dict[str, str]) -> Dict[str, str]:
     """Prune overly broad synonyms and keep/augment anchored phrases."""
@@ -1070,8 +1097,7 @@ def deduplicate_symptoms_and_update_synonyms(
                 raw_symptoms.append(symptom)
 
     if os.path.exists(syn_path):
-        with open(syn_path, "r", encoding="utf-8") as f:
-            synonym_map: Dict[str, str] = json.load(f)
+        synonym_map: Dict[str, str] = _load_json_relaxed(syn_path)
     else:
         synonym_map = {}
 
