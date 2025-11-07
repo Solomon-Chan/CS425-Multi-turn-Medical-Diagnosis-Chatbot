@@ -1,0 +1,267 @@
+{
+  "hypertension": {
+    "full_name": "Hypertension",
+    "symptoms": {
+      "primary": [
+        "headache",
+        "severe headache",
+        "persistent headache",
+        "morning headache",
+        "dizziness",
+        "blurred vision",
+        "chest pain"
+      ],
+      "secondary": [
+        "fatigue",
+        "nosebleed",
+        "shortness of breath",
+        "difficulty breathing",
+        "irregular heartbeat",
+        "blood in urine",
+        "pounding in chest",
+        "vision problems"
+      ]
+    },
+    "min_match": 2,
+    "description": "Hypertension, or high blood pressure, is a condition where the force of blood against artery walls is consistently too high. Many people with hypertension have no symptoms, which is why it's often called the 'silent killer'. When symptoms do occur, they may include headaches (especially in the morning), dizziness, blurred vision, or chest discomfort. Hypertension can lead to serious complications such as heart disease, stroke, and kidney problems if left untreated.",
+    "recommendation": "Avoid excessive salt intake, as sodium can raise blood pressure. Limit alcohol consumption and avoid smoking, as both can significantly increase blood pressure and damage blood vessels. Don't skip prescribed medications or stop taking them without consulting your doctor. Avoid high-stress situations when possible and don't consume excessive amounts of caffeine. Regular monitoring of your blood pressure is essential, so don't neglect routine check-ups."
+  },
+  "upper_respiratory_tract_infection": {
+    "full_name": "Upper Respiratory Tract Infection",
+    "symptoms": {
+      "primary": [
+        "runny nose",
+        "nasal congestion",
+        "stuffy nose",
+        "sore throat",
+        "cough",
+        "sneezing"
+      ],
+      "secondary": [
+        "hoarse voice",
+        "mild fever",
+        "low grade fever",
+        "post nasal drip",
+        "watery eyes",
+        "mild headache",
+        "body aches",
+        "fatigue",
+        "loss of appetite"
+      ]
+    },
+    "min_match": 2,
+    "description": "An upper respiratory tract infection (URTI) is an infection of the nose, throat, sinuses, or larynx, commonly known as the common cold when caused by viruses. Symptoms typically include nasal congestion, runny nose, sneezing, sore throat, and cough. The infection is usually self-limiting and resolves within 7-10 days. URTIs are highly contagious and spread through respiratory droplets when an infected person coughs or sneezes.",
+    "recommendation": "Avoid close contact with others to prevent spreading the infection. Don't smoke or expose yourself to secondhand smoke, as this irritates the respiratory tract and delays healing. Avoid cold or dry air when possible, and don't overexert yourself - rest is important for recovery. Don't touch your face, especially your nose and eyes, without washing your hands first. Avoid alcohol and caffeinated beverages as they can cause dehydration. Don't ignore worsening symptoms such as high fever, severe headache, or difficulty breathing, as these may indicate complications."
+  },
+  "depression_or_anxiety": {
+    "full_name": "Depression or Anxiety",
+    "symptoms": {
+      "primary": [
+        "persistent sadness",
+        "loss of interest",
+        "excessive worry",
+        "feeling anxious",
+        "panic attacks",
+        "feeling hopeless",
+        "nervousness"
+      ],
+      "secondary": [
+        "fatigue",
+        "sleep problems",
+        "insomnia",
+        "difficulty sleeping",
+        "restlessness",
+        "difficulty concentrating",
+        "irritability",
+        "changes in appetite",
+        "muscle tension",
+        "rapid heartbeat",
+        "sweating"
+      ]
+    },
+    "min_match": 2,
+    "description": "Depression and anxiety are mental health conditions that can significantly impact daily functioning. Depression is characterized by persistent sadness, loss of interest in activities, and feelings of hopelessness. Anxiety involves excessive worry, nervousness, and physical symptoms like rapid heartbeat and muscle tension. These conditions often occur together and can affect sleep, appetite, concentration, and energy levels. Both are treatable with appropriate professional support.",
+    "recommendation": "Don't isolate yourself - maintain social connections even when you don't feel like it. Avoid self-medicating with alcohol or drugs, as these can worsen symptoms and interfere with treatment. Don't ignore or dismiss your symptoms - mental health is as important as physical health. Avoid making major life decisions when feeling severely depressed or anxious. Don't skip therapy appointments or stop taking prescribed medications without consulting your healthcare provider. Avoid excessive caffeine, which can increase anxiety symptoms. Don't hesitate to reach out for help if you're having thoughts of self-harm."
+  },
+  "back_pain": {
+    "full_name": "Back Pain",
+    "symptoms": {
+      "primary": [
+        "back pain",
+        "lower back pain",
+        "upper back pain",
+        "sharp back pain",
+        "chronic back pain",
+        "muscle ache in back"
+      ],
+      "secondary": [
+        "stiffness",
+        "limited range of motion",
+        "difficulty standing",
+        "pain radiating down leg",
+        "numbness in legs",
+        "tingling",
+        "muscle spasms",
+        "pain worsens with movement"
+      ]
+    },
+    "min_match": 1,
+    "description": "Back pain is a common condition affecting the muscles, bones, nerves, or other structures in the spine. It can range from a mild, dull ache to severe, debilitating pain. Lower back pain is particularly common and can be acute (lasting a few days to weeks) or chronic (lasting more than three months). Causes include muscle strain, poor posture, injury, arthritis, or herniated discs. Most back pain improves with self-care, though some cases require medical intervention.",
+    "recommendation": "Avoid prolonged bed rest, as this can actually worsen back pain - gentle movement is generally better. Don't lift heavy objects, especially by bending at the waist. Avoid sitting or standing in one position for extended periods. Don't wear high heels, as they can strain your back. Avoid sudden, twisting movements or activities that strain your back. Don't ignore pain that radiates down your leg, causes numbness or weakness, or is accompanied by bladder/bowel problems - these require immediate medical attention. Avoid smoking, as it can reduce blood flow to the spine and slow healing."
+  },
+  "arthritis": {
+    "full_name": "Arthritis",
+    "symptoms": {
+      "primary": [
+        "joint pain",
+        "joint stiffness",
+        "swollen joints",
+        "joint swelling",
+        "morning stiffness"
+      ],
+      "secondary": [
+        "reduced range of motion",
+        "joint warmth",
+        "joint redness",
+        "fatigue",
+        "difficulty moving joints",
+        "joint tenderness",
+        "decreased flexibility",
+        "pain worsens with activity"
+      ]
+    },
+    "min_match": 2,
+    "description": "Arthritis is inflammation of one or more joints, causing pain, swelling, stiffness, and decreased range of motion. The two most common types are osteoarthritis (wear-and-tear damage to joint cartilage) and rheumatoid arthritis (an autoimmune condition). Symptoms often worsen with age and can significantly impact daily activities. Morning stiffness lasting more than 30 minutes is common, particularly in inflammatory types of arthritis.",
+    "recommendation": "Avoid high-impact activities that put excessive stress on affected joints, such as running or jumping. Don't remain sedentary - gentle, regular exercise is important for maintaining joint flexibility and strength. Avoid repetitive movements that strain affected joints. Don't ignore sudden increases in pain, swelling, or warmth in joints. Avoid gaining excess weight, as this puts additional stress on weight-bearing joints. Don't apply heat to acutely swollen joints - use ice instead. Avoid activities that require tight gripping if you have hand arthritis."
+  },
+  "dermatitis": {
+    "full_name": "Dermatitis",
+    "symptoms": {
+      "primary": [
+        "rash",
+        "itchy skin",
+        "itching",
+        "red skin",
+        "skin redness",
+        "dry skin"
+      ],
+      "secondary": [
+        "swelling of skin",
+        "blisters",
+        "oozing",
+        "crusting",
+        "flaking skin",
+        "scaling",
+        "skin burning",
+        "skin irritation",
+        "thickened skin"
+      ]
+    },
+    "min_match": 2,
+    "description": "Dermatitis is a general term for skin inflammation that can result from various causes including allergic reactions, irritants, or genetic factors. Common types include atopic dermatitis (eczema), contact dermatitis, and seborrheic dermatitis. Symptoms typically include red, itchy, inflamed skin that may develop blisters, ooze, or become crusty. The condition can be acute or chronic and may flare up periodically.",
+    "recommendation": "Avoid scratching affected areas, as this can worsen inflammation and lead to infection. Don't use harsh soaps, detergents, or fragranced products on affected skin. Avoid known triggers such as certain fabrics, chemicals, or allergens. Don't take long, hot baths or showers, as these can dry out and irritate the skin. Avoid sudden temperature changes and excessive sweating when possible. Don't wear tight clothing over affected areas. Avoid stress, which can trigger flare-ups in some types of dermatitis."
+  },
+  "acute_otitis_media": {
+    "full_name": "Acute Otitis Media",
+    "symptoms": {
+      "primary": [
+        "ear pain",
+        "earache",
+        "hearing loss",
+        "difficulty hearing",
+        "ear discharge",
+        "fluid from ear"
+      ],
+      "secondary": [
+        "fever",
+        "irritability",
+        "difficulty sleeping",
+        "tugging at ear",
+        "loss of appetite",
+        "headache",
+        "dizziness",
+        "balance problems"
+      ]
+    },
+    "min_match": 1,
+    "description": "Acute otitis media is a middle ear infection, commonly occurring in children but can affect adults. It develops when bacteria or viruses infect the space behind the eardrum, often following a cold or respiratory infection. Symptoms include ear pain, fever, fluid drainage, and temporary hearing loss. In children, symptoms may also include irritability, difficulty sleeping, and tugging at the affected ear. Most cases resolve on their own, though some require treatment.",
+    "recommendation": "Avoid getting water in the affected ear while bathing or swimming. Don't insert cotton swabs, fingers, or other objects into the ear canal. Avoid exposure to cigarette smoke, which increases the risk of ear infections. Don't ignore symptoms that worsen or don't improve after a few days. Avoid flying if possible, as pressure changes can increase pain. Don't lie flat when sleeping - elevate your head to reduce pressure. For children, avoid bottle-feeding while lying down, as this can allow fluid to enter the middle ear."
+  },
+  "diabetes": {
+    "full_name": "Diabetes",
+    "symptoms": {
+      "primary": [
+        "increased thirst",
+        "excessive thirst",
+        "frequent urination",
+        "extreme hunger",
+        "unexplained weight loss",
+        "blurred vision"
+      ],
+      "secondary": [
+        "fatigue",
+        "slow healing sores",
+        "frequent infections",
+        "tingling in hands",
+        "tingling in feet",
+        "numbness in hands",
+        "numbness in feet",
+        "dry skin",
+        "darkened skin patches"
+      ]
+    },
+    "min_match": 2,
+    "description": "Diabetes is a chronic condition that affects how your body processes blood sugar (glucose). In Type 1 diabetes, the body doesn't produce insulin. In Type 2 diabetes, the body doesn't use insulin properly. Common symptoms include increased thirst, frequent urination, extreme hunger, unexplained weight loss, fatigue, and blurred vision. If left unmanaged, diabetes can lead to serious complications affecting the heart, kidneys, eyes, and nerves.",
+    "recommendation": "Avoid foods high in refined sugars and simple carbohydrates, which can cause blood sugar spikes. Don't skip meals or go long periods without eating, as this can cause dangerous blood sugar fluctuations. Avoid excessive alcohol consumption, which can affect blood sugar levels. Don't ignore foot injuries or infections, as diabetes can slow healing and reduce sensation. Avoid smoking, which increases the risk of diabetes complications. Don't miss regular check-ups, blood sugar monitoring, or prescribed medications. Avoid prolonged periods of inactivity - regular exercise is crucial for blood sugar management."
+  },
+  "urinary_tract_infection": {
+    "full_name": "Urinary Tract Infection",
+    "symptoms": {
+      "primary": [
+        "burning urination",
+        "painful urination",
+        "frequent urination",
+        "urgent need to urinate",
+        "cloudy urine",
+        "blood in urine"
+      ],
+      "secondary": [
+        "strong smelling urine",
+        "pelvic pain",
+        "lower abdominal pain",
+        "fever",
+        "fatigue",
+        "pressure in lower abdomen"
+      ]
+    },
+    "min_match": 2,
+    "description": "A urinary tract infection (UTI) is an infection in any part of the urinary system, including the kidneys, bladder, ureters, or urethra. Most UTIs affect the lower urinary tract (bladder and urethra). Symptoms include a burning sensation during urination, frequent urination, urgent need to urinate, cloudy or bloody urine, and pelvic pain. UTIs are more common in women and are usually caused by bacteria. If left untreated, a UTI can spread to the kidneys and cause serious complications.",
+    "recommendation": "Avoid holding urine for long periods - urinate when you feel the need. Don't use irritating feminine products such as douches, powders, or scented sprays. Avoid bubble baths and harsh soaps in the genital area. Don't wear tight-fitting pants or synthetic underwear that doesn't breathe. Avoid caffeine and alcohol, which can irritate the bladder. Don't ignore symptoms or delay seeking treatment, as untreated UTIs can lead to kidney infections. After intercourse, don't delay urinating, as this helps flush out bacteria."
+  },
+  "allergies": {
+    "full_name": "Allergies",
+    "symptoms": {
+      "primary": [
+        "sneezing",
+        "itchy eyes",
+        "watery eyes",
+        "runny nose",
+        "nasal congestion",
+        "itchy nose"
+      ],
+      "secondary": [
+        "post nasal drip",
+        "cough",
+        "itchy throat",
+        "sinus pressure",
+        "facial pain",
+        "fatigue",
+        "skin rash",
+        "hives"
+      ]
+    },
+    "min_match": 2,
+    "description": "Allergies occur when the immune system reacts to substances (allergens) that are normally harmless, such as pollen, dust mites, pet dander, or certain foods. Common symptoms include sneezing, itchy and watery eyes, runny or stuffy nose, and skin reactions. Seasonal allergies (hay fever) occur during specific times of the year, while perennial allergies can affect people year-round. Allergies can range from mild to severe and, in rare cases, can cause life-threatening anaphylaxis.",
+    "recommendation": "Avoid known allergens whenever possible by checking pollen counts and staying indoors on high-pollen days. Don't rub your eyes, as this can worsen itching and irritation. Avoid opening windows during peak pollen times - use air conditioning instead. Don't hang laundry outside to dry when pollen counts are high. Avoid walking through fields or areas with high grass if you have pollen allergies. Don't neglect regular cleaning to reduce dust mites and pet dander. Avoid exposure to cigarette smoke, which can worsen allergy symptoms. Don't ignore severe symptoms like difficulty breathing or swelling of the face or throat - seek immediate medical attention."
+  }
+}
