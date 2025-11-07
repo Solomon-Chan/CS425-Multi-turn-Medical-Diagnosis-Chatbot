@@ -1,6 +1,7 @@
 import torch
 from transformers import AutoTokenizer, AutoModelForTokenClassification
 import sys
+import argparse
 from pathlib import Path
 
 # Add project root to path
@@ -11,7 +12,8 @@ import config
 def load_model_and_tokenizer(model_path_or_name=None):
     """Load model and tokenizer from specified path or use config default."""
     if model_path_or_name is None:
-        model_path_or_name = config.MODEL_PATH
+        # Default to BioBERT NER checkpoint if config doesn't specify
+        model_path_or_name = str(project_root / "models" / "biobert_ner")
     tokenizer = AutoTokenizer.from_pretrained(model_path_or_name)
     model = AutoModelForTokenClassification.from_pretrained(model_path_or_name)
     return tokenizer, model
@@ -57,15 +59,16 @@ def predict(text, tokenizer, model, label_map=None):
     return list(zip(tokens, labels))
 
 if __name__ == "__main__":
-    # Validate paths exist
-    config.validate_paths()
-    
-    tokenizer, model = load_model_and_tokenizer()
+    parser = argparse.ArgumentParser(description="Run BioBERT NER inference")
+    parser.add_argument("--model-dir", type=str, default=str(project_root / "models" / "biobert_ner"), help="Model directory")
+    parser.add_argument("--text", type=str, default="Patient complains of chest pain and mild fever.", help="Text to tag")
+    args = parser.parse_args()
+
+    tokenizer, model = load_model_and_tokenizer(args.model_dir)
     model.eval()
 
-    sample_text = "Patient complains of chest pain and mild fever."
-    preds = predict(sample_text, tokenizer, model)
-    print(f"Input: {sample_text}\n")
+    preds = predict(args.text, tokenizer, model)
+    print(f"Input: {args.text}\n")
     print("Token-level predictions:")
     for token, label in preds:
         print(f"{token:20s} {label}")

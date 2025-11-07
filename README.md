@@ -33,35 +33,31 @@ python scripts/auto_label.py -i data/ai-medical-chatbot.csv -d data --fuzzy-cuto
 ```
 
 #### Auto-label with validation examples
+```bash
 python scripts/auto_label.py --make-datasets --input data/ai-medical-chatbot.csv --data-dir data --min-per-class 900 --max-per-class 1000 --fuzzy-cutoff 90 --fuzzy-max-ngram 4
+```
 
 #### Test auto-labeling with generated data
 ```bash
 python tests/test_auto_label_sample.py
 ```
 
-### Create Stratified Validation Set
-```bash
-python scripts/select_gold_sample.py
-```
-
 ### NER Inference
 
 #### Test NER model inference
 ```bash
-python scripts/infer_ner.py
+python scripts/infer_ner.py --model-dir "models/biobert_ner/checkpoint-biobert-ner-best" --text "Patient complains of chest pain and mild fever."
+```
+
+#### Evaluate NER model on validation set
+```bash
+python scripts/evaluate_ner.py --model-dir "models/biobert_ner/checkpoint-biobert-ner-best" --valid-path data/valid.jsonl
 ```
 
 #### Test NER symptom extraction
 ```bash
 python tests/test_infer_ner.py
 ```
-
-#### Evaluate NER model on validation set
-```bash
-python scripts/evaluate_ner.py
-```
-
 
 - Quick test (recommended on CPU):
 	Runs the evaluation on a limited number of examples so you can iterate quickly.

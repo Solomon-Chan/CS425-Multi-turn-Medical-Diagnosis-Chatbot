@@ -66,23 +66,23 @@ def predict_tags(tokens, tokenizer, model):
 def main():
     parser = argparse.ArgumentParser(description="Evaluate NER model with tokenizer-aligned gold tags")
     parser.add_argument("--max-examples", type=int, default=None, help="Limit number of examples processed (for faster testing)")
+    parser.add_argument("--model-dir", type=str, default=str((Path(__file__).resolve().parent.parent / "models" / "biobert_ner")), help="Path to model directory")
+    parser.add_argument("--valid-path", type=str, default=str((Path(__file__).resolve().parent.parent / "data" / "valid.jsonl")), help="Path to validation jsonl")
     args = parser.parse_args()
 
     print("Starting NER evaluation...")
     
-    # Validate paths exist
-    print("Validating paths...")
-    config.validate_paths()
-    
-    model_dir = config.MODEL_PATH
+    # Resolve model and validation paths
+    model_dir = Path(args.model_dir)
     print(f"Using model from: {model_dir}")
-    
-    # Try bio_outputs first since that's our original validation data
-    valid_path = config.BIO_OUTPUTS_DIR / "validation.jsonl"
+    valid_path = Path(args.valid_path)
     if not valid_path.exists():
-        valid_path = config.DATA_DIR / "validation.jsonl"
+        # Fallbacks
+        for p in [config.DATA_DIR / "valid.jsonl", config.DATA_DIR / "validation.jsonl", config.BIO_OUTPUTS_DIR / "validation.jsonl"]:
+            if p.exists():
+                valid_path = p
+                break
     print(f"Using validation data from: {valid_path}")
-    
     if not valid_path.exists():
         raise FileNotFoundError(f"Validation file not found at {valid_path}")
 
@@ -100,12 +100,17 @@ def main():
     
     # Always generate fresh predictions
     print(f"Generating predictions using model from: {model_dir}")
-    tokenizer = AutoTokenizer.from_pretrained(model_dir)
-    model = AutoModelForTokenClassification.from_pretrained(model_dir)
+    tokenizer = AutoTokenizer.from_pretrained(str(model_dir))
+    model = AutoModelForTokenClassification.from_pretrained(str(model_dir))
     model.eval()
 
     true_tags = []
     pred_tags = []
+    # For loss aggregation
+    token_losses = []  # per-token losses
+    sentence_losses = []  # average loss per sentence (macro proxy)
+    entity_token_losses = []  # loss restricted to entity tokens
+    ce_loss = torch.nn.CrossEntropyLoss(reduction="none")
     
     # Generate predictions on-the-fly; align gold to the SAME tokenizer encoding
     with open(str(valid_path), "r", encoding="utf-8") as f:
@@ -130,15 +135,24 @@ def main():
             # Build gold labels aligned to the encoded word pieces
             word_ids = encoded.word_ids(batch_index=0)
             gold_aligned = []
+            gold_ids_for_loss = []  # aligned to input_ids length with -100 for special/subword positions
             prev_word_idx = None
             for token_index, word_idx in enumerate(word_ids):
                 if word_idx is None:
+                    gold_ids_for_loss.append(-100)
                     continue
                 if word_idx != prev_word_idx:
                     # Use the gold label for that original token index
                     lbl = gold[word_idx] if word_idx < len(gold) else "O"
                     gold_aligned.append(lbl)
+                    # Map gold label to id for loss
+                    inv_map = {v: k for k, v in config.LABEL_MAP.items()}
+                    gold_id = inv_map.get(lbl, inv_map.get("O", 0))
+                    gold_ids_for_loss.append(gold_id)
                     prev_word_idx = word_idx
+                else:
+                    # subword: ignore in loss
+                    gold_ids_for_loss.append(-100)
 
             # Predict using the model on the exact same encoding
             with torch.no_grad():
@@ -175,6 +189,27 @@ def main():
             true_tags.append(gold_aligned)
             pred_tags.append(pred_aligned)
             all_tokens.append(tokens)  # Store tokens for analysis
+            # Compute losses
+            logits = outputs.logits.squeeze(0)  # seq_len x num_labels
+            gold_tensor = torch.tensor(gold_ids_for_loss, dtype=torch.long)
+            # Align shapes if needed
+            if logits.size(0) != len(gold_ids_for_loss):
+                # pad/truncate gold to logits length
+                if len(gold_ids_for_loss) < logits.size(0):
+                    gold_tensor = torch.cat([gold_tensor, torch.full((logits.size(0)-len(gold_ids_for_loss),), -100, dtype=torch.long)])
+                else:
+                    gold_tensor = gold_tensor[:logits.size(0)]
+            per_token_loss = ce_loss(logits, gold_tensor)  # length seq_len
+            valid_mask = (gold_tensor != -100)
+            if valid_mask.any():
+                # token-level aggregation
+                token_losses.extend(per_token_loss[valid_mask].tolist())
+                # sentence-level average
+                sentence_losses.append(per_token_loss[valid_mask].mean().item())
+                # entity-token-only loss
+                entity_mask = torch.tensor([1 if (t != -100 and (g != 0 and config.LABEL_MAP.get(g, 'O') != 'O')) else 0 for t, g in zip(gold_tensor.tolist(), gold_tensor.tolist())], dtype=torch.bool)
+                if entity_mask.any():
+                    entity_token_losses.extend(per_token_loss[entity_mask].tolist())
             processed += 1
     # Print detailed debug info
     print(f"\nProcessed {len(true_tags)} sentences")
@@ -309,23 +344,51 @@ def main():
     print("\nEvaluation Report:")
     print(report)
     
+    # Token-level (micro) metrics
     precision = precision_score(true_tags, pred_tags, zero_division="warn")
     recall = recall_score(true_tags, pred_tags, zero_division="warn")
     f1 = f1_score(true_tags, pred_tags, zero_division="warn")
+    # Token-level macro metrics
+    precision_macro = precision_score(true_tags, pred_tags, average='macro', zero_division="warn")
+    recall_macro = recall_score(true_tags, pred_tags, average='macro', zero_division="warn")
+    f1_macro = f1_score(true_tags, pred_tags, average='macro', zero_division="warn")
     
     print(f"Precision: {precision:.4f}")
     print(f"Recall   : {recall:.4f}")
     print(f"F1       : {f1:.4f}")
 
+    # Aggregate losses
+    token_loss_avg = sum(token_losses)/len(token_losses) if token_losses else 0.0
+    sentence_loss_avg = sum(sentence_losses)/len(sentence_losses) if sentence_losses else 0.0
+    entity_token_loss_avg = sum(entity_token_losses)/len(entity_token_losses) if entity_token_losses else 0.0
+
     # Save report text
     report_path.parent.mkdir(parents=True, exist_ok=True)
     with open(str(report_path), "w") as out:
-        out.write("Evaluation Report:\n")
-        out.write(str(report))  # Convert report to string explicitly
+        out.write("NER Evaluation (BioBERT)\n")
+        out.write("========================\n\n")
+        out.write("Token-level metrics (seqeval):\n")
+        out.write(str(report))
         out.write("\n")
-        out.write(f"Precision: {precision:.4f}\n")
-        out.write(f"Recall   : {recall:.4f}\n")
-        out.write(f"F1       : {f1:.4f}\n")
+        out.write(f"Token Precision (micro): {precision:.4f}\n")
+        out.write(f"Token Recall    (micro): {recall:.4f}\n")
+        out.write(f"Token F1        (micro): {f1:.4f}\n")
+        out.write(f"Token Precision (macro): {precision_macro:.4f}\n")
+        out.write(f"Token Recall    (macro): {recall_macro:.4f}\n")
+        out.write(f"Token F1        (macro): {f1_macro:.4f}\n")
+        out.write(f"Token Loss (avg per token): {token_loss_avg:.6f}\n\n")
+
+        out.write("Entity-level metrics:\n")
+        out.write(f"Entity Precision: {ent_precision:.4f}\n")
+        out.write(f"Entity Recall   : {ent_recall:.4f}\n")
+        out.write(f"Entity F1       : {ent_f1:.4f}\n")
+        out.write(f"Entity-token Loss (avg per entity token): {entity_token_loss_avg:.6f}\n\n")
+
+        out.write("Macro-level metrics:\n")
+        out.write(f"Macro (sentence-avg) Loss: {sentence_loss_avg:.6f}\n")
+        out.write(f"Macro Precision (token-level macro): {precision_macro:.4f}\n")
+        out.write(f"Macro Recall    (token-level macro): {recall_macro:.4f}\n")
+        out.write(f"Macro F1        (token-level macro): {f1_macro:.4f}\n")
 
 if __name__ == "__main__":
     main()

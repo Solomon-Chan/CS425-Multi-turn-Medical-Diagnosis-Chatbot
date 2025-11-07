@@ -10,7 +10,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent
 
 # Model paths
-MODEL_DIR = PROJECT_ROOT / "models" / "biobert-ner"
+MODEL_DIR = PROJECT_ROOT / "models" / "biobert_ner" / "checkpoint-biobert-ner-best"
 MODEL_PATH = str(MODEL_DIR)
 
 # Data paths

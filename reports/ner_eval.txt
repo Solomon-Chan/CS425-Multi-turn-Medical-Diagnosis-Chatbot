@@ -1,12 +1,31 @@
-Evaluation Report:
+NER Evaluation (BioBERT)
+========================
+
+Token-level metrics (seqeval):
               precision    recall  f1-score   support
 
-         SYM     0.5888    0.4091    0.4828       154
+         SYM     0.9445    0.9730    0.9585      5371
 
-   micro avg     0.5888    0.4091    0.4828       154
-   macro avg     0.5888    0.4091    0.4828       154
-weighted avg     0.5888    0.4091    0.4828       154
+   micro avg     0.9445    0.9730    0.9585      5371
+   macro avg     0.9445    0.9730    0.9585      5371
+weighted avg     0.9445    0.9730    0.9585      5371
 
-Precision: 0.5888
-Recall   : 0.4091
-F1       : 0.4828
+Token Precision (micro): 0.9445
+Token Recall    (micro): 0.9730
+Token F1        (micro): 0.9585
+Token Precision (macro): 0.9445
+Token Recall    (macro): 0.9730
+Token F1        (macro): 0.9585
+Token Loss (avg per token): 0.007454
+
+Entity-level metrics:
+Entity Precision: 0.9445
+Entity Recall   : 0.9730
+Entity F1       : 0.9585
+Entity-token Loss (avg per entity token): 0.109587
+
+Macro-level metrics:
+Macro (sentence-avg) Loss: 0.011495
+Macro Precision (token-level macro): 0.9445
+Macro Recall    (token-level macro): 0.9730
+Macro F1        (token-level macro): 0.9585
