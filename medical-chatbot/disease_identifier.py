@@ -177,45 +177,45 @@ class DiseaseIdentifier:
         else:
             return 'full_medquad', None
     
-    def diagnose_with_biogpt(self, symptoms: List[str]) -> List[str]:
+    def diagnose_with_biogpt(self, symptoms: List[str]) -> Optional[str]:
         """
         Use BioGPT to diagnose disease from symptoms.
         
         Returns:
-            List of disease candidates
+            A single disease string (most likely diagnosis), or None if failed.
         """
         symptom_text = ', '.join(symptoms)
         prompt = f"A patient presents with {symptom_text}. The most likely diagnosis is"
-        
+
         try:
             inputs = self.biogpt_tokenizer(prompt, return_tensors="pt").to(self.device)
-            
+
+            # Only generate one output sequence (top-1)
             outputs = self.biogpt_model.generate(
                 inputs.input_ids,
                 max_length=100,
-                num_return_sequences=3,
+                num_return_sequences=1,  # ✅ single output only
                 temperature=0.7,
-                do_sample=True,
-                top_p=0.9
+                do_sample=False,          # ✅ deterministic for consistency
             )
-            
-            # Parse disease names from outputs
-            candidates = []
-            for output in outputs:
-                text = self.biogpt_tokenizer.decode(output, skip_special_tokens=True)
-                # Extract disease name (after "diagnosis is")
-                if "diagnosis is" in text.lower():
-                    disease_part = text.lower().split("diagnosis is")[-1]
-                    disease = disease_part.split('.')[0].split(',')[0].strip()
-                    if disease and len(disease) < 100:
-                        candidates.append(disease)
-            
-            return candidates if candidates else None
-        
+
+            # Decode and extract disease name
+            text = self.biogpt_tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+            # Extract the portion after "diagnosis is"
+            disease = None
+            if "diagnosis is" in text.lower():
+                disease_part = text.lower().split("diagnosis is")[-1]
+                disease = disease_part.split('.')[0].split(',')[0].strip()
+
+            if disease and len(disease) < 100:
+                return disease
+            return None
+
         except Exception as e:
             print(f"BioGPT diagnosis error: {e}")
             return None
-    
+
     def find_closest_medquad_disease(self, biogpt_disease: str) -> Optional[str]:
         """Match BioGPT diagnosis to MedQuAD database."""
         if not biogpt_disease:
@@ -446,7 +446,7 @@ class DiseaseIdentifier:
     def diagnose(self, symptoms: List[str], verbose: bool = False) -> Dict:
         """
         Complete diagnosis pipeline.
-        
+
         Returns:
             {
                 'disease': str,
@@ -459,17 +459,17 @@ class DiseaseIdentifier:
         """
         if verbose:
             print(f"\n🔍 Diagnosing from symptoms: {symptoms}")
-        
+
         # Tier 1: Check common illnesses
         strategy, common_match = self.check_common_conditions(symptoms)
-        
+
         if strategy == 'common_illness':
             # High confidence common illness
             condition_data = common_match[1]['data']
-            
+
             if verbose:
                 print(f"✓ Common illness detected: {common_match[1]['full_name']}")
-            
+
             return {
                 'disease': common_match[1]['full_name'],
                 'confidence': 'high',
@@ -478,38 +478,36 @@ class DiseaseIdentifier:
                 'recommendation': condition_data.get('recommendation', ''),
                 'top_candidates': [common_match[1]['full_name']]
             }
-        
+
         # Tier 2: Use BioGPT + MedQuAD
         if verbose:
             print("  Using BioGPT for diagnosis...")
-        
+
+        biogpt_candidate = None  # ensure variable always exists
+
         try:
-            biogpt_candidates = self.diagnose_with_biogpt(symptoms)
+            biogpt_candidate = self.diagnose_with_biogpt(symptoms)
         except Exception as e:
             if verbose:
                 print(f"  BioGPT error: {e}")
-            biogpt_candidates = None
-        
+            biogpt_candidate = None
+
         disease = None
-        
-        if biogpt_candidates:
-            # Try to match to MedQuAD
-            for candidate in biogpt_candidates:
-                try:
-                    matched = self.find_closest_medquad_disease(candidate)
-                    if matched:
-                        disease = matched
-                        if verbose:
-                            print(f"  BioGPT diagnosis: '{candidate}' → '{disease}'")
-                        break
-                except Exception as e:
+
+        if biogpt_candidate:
+            try:
+                matched = self.find_closest_medquad_disease(biogpt_candidate)
+                if matched:
+                    disease = matched
                     if verbose:
-                        print(f"  Error matching '{candidate}': {e}")
-                    continue
-            
-            if not disease and biogpt_candidates:
-                disease = biogpt_candidates[0]
-        
+                        print(f"  BioGPT diagnosis: '{biogpt_candidate}' → '{disease}'")
+                else:
+                    disease = biogpt_candidate
+            except Exception as e:
+                if verbose:
+                    print(f"  Error matching BioGPT diagnosis: {e}")
+                disease = biogpt_candidate
+
         # Fallback to semantic search if BioGPT failed
         if not disease:
             if verbose:
@@ -521,7 +519,7 @@ class DiseaseIdentifier:
                 if verbose:
                     print(f"  Semantic search error: {e}")
                 disease = None
-        
+
         if not disease:
             return {
                 'disease': None,
@@ -531,7 +529,7 @@ class DiseaseIdentifier:
                 'recommendation': 'Please consult a healthcare provider for proper evaluation.',
                 'top_candidates': []
             }
-        
+
         # Extract information from MedQuAD
         try:
             facts = self.retrieve_facts_for_disease(disease, top_k=12)
@@ -542,7 +540,7 @@ class DiseaseIdentifier:
                 print(f"  Error extracting info: {e}")
             description = f"Information about {disease} is available, but we encountered an error retrieving details."
             recommendation = "Please consult a healthcare provider for more information about this condition."
-        
+
         # Get top 3 candidates for disambiguation
         try:
             ranked = self.predict_disease_medquad(symptoms, top_k=50)
@@ -551,11 +549,11 @@ class DiseaseIdentifier:
             if verbose:
                 print(f"  Error getting candidates: {e}")
             top_candidates = [disease]
-        
+
         return {
             'disease': disease,
             'confidence': 'medium',
-            'strategy': 'biogpt' if biogpt_candidates else 'semantic_search',
+            'strategy': 'biogpt' if biogpt_candidate else 'semantic_search',
             'description': description,
             'recommendation': recommendation,
             'top_candidates': top_candidates
