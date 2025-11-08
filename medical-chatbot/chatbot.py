@@ -9,6 +9,8 @@ Requires 3 confirmed symptoms before providing a diagnosis using BioBERT.
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional
 from enum import Enum
+import spacy
+import random
 
 
 class Phase(Enum):
@@ -61,7 +63,7 @@ class ChatState:
 class MedicalChatbot:
     """Main chatbot orchestrating the confirmation flow."""
     
-    def __init__(self, symptom_extractor, disease_identifier):
+    def __init__(self, symptom_extractor, disease_identifier, intent_model=None):
         """
         Initialize chatbot with ML components.
         
@@ -71,6 +73,7 @@ class MedicalChatbot:
         """
         self.extractor = symptom_extractor
         self.identifier = disease_identifier
+        self.intent_model = intent_model
         self.state = ChatState()
     
     def welcome(self) -> str:
@@ -119,6 +122,20 @@ class MedicalChatbot:
                 "• 'help' - Show this message\n\n"
                 "Just describe your symptoms naturally, and I'll guide you through the process."
             )
+        
+        if self.state.phase in [Phase.CONFIRM_SYMPTOM, Phase.CONFIRM_SECONDARY, Phase.DIAGNOSE]:
+            # Skip small talk detection in these phases
+            pass
+        else:
+            intent_doc = self.intent_model(text)
+            intent = max(intent_doc.cats, key=intent_doc.cats.get)
+            if intent == "small_talk" and intent_doc.cats[intent] > 0.7:
+                responses = [
+                    "Let's focus on your health. Could you describe any symptoms you're feeling?",
+                    "I’m here to help with medical concerns — are you experiencing any symptoms?",
+                    "Sure thing! But first, can you tell me what symptoms you have?"
+                ]
+                return random.choice(responses)
         
         # Route based on phase
         if self.state.phase == Phase.COLLECT:
@@ -339,9 +356,13 @@ def create_chatbot():
     print()
     identifier = DiseaseIdentifier()
     print()
+
+    print("Loading intent classifier...")
+    intent_model = spacy.load("models/intent_model_e3_v1")
+    print("✓ Intent model loaded\n")
     
     # Create chatbot
-    chatbot = MedicalChatbot(extractor, identifier)
+    chatbot = MedicalChatbot(extractor, identifier, intent_model)
     
     print("="*70)
     print("✓ Chatbot ready!\n")
