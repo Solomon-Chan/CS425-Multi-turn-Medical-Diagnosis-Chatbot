@@ -3,6 +3,7 @@ Stage 1: Medical Chatbot with Confirmation Flow
 
 Main chatbot orchestrating the symptom extraction and disease identification process.
 Features a confirmation-based conversation flow to ensure accuracy.
+Requires 3 confirmed symptoms before providing a diagnosis using BioBERT.
 """
 
 from dataclasses import dataclass, field
@@ -16,7 +17,6 @@ class Phase(Enum):
     CONFIRM_SYMPTOM = "confirm_symptom"
     CONFIRM_SECONDARY = "confirm_secondary"
     DIAGNOSE = "diagnose"
-    DISAMBIGUATE = "disambiguate"
     EXPLAIN = "explain"
 
 
@@ -29,7 +29,7 @@ class ChatState:
     candidates_queue: List[str] = field(default_factory=list)
     phase: Phase = Phase.COLLECT
     turn: int = 0
-    k_threshold: int = 4  # Collect 4 confirmed symptoms
+    k_threshold: int = 3  # Collect 3 confirmed symptoms
     last_extraction: List = field(default_factory=list)
     diagnosis_result: Optional[Dict] = None
     
@@ -80,6 +80,7 @@ class MedicalChatbot:
             "I'll help you understand your symptoms and provide guidance.\n\n"
             "⚠️ Important: This is for informational purposes only and not a substitute "
             "for professional medical advice.\n\n"
+            "📋 Please describe ONE symptom at a time for the most accurate assessment.\n\n"
             "What symptoms are you experiencing?"
         )
     
@@ -131,9 +132,6 @@ class MedicalChatbot:
         
         elif self.state.phase == Phase.DIAGNOSE:
             return self._handle_diagnose_phase(text)
-        
-        elif self.state.phase == Phase.DISAMBIGUATE:
-            return self._handle_disambiguate_phase(text)
         
         elif self.state.phase == Phase.EXPLAIN:
             return "Thank you. If you have more symptoms, type 'restart' to begin again."
@@ -277,7 +275,7 @@ class MedicalChatbot:
                     "I recommend consulting with a healthcare provider for proper evaluation."
                 )
             
-            # Format response
+            # Format response - go straight to final diagnosis
             confidence_emoji = {
                 'high': '✅',
                 'medium': '⚠️',
@@ -304,13 +302,6 @@ class MedicalChatbot:
         
         else:
             return "Please answer 'yes' or 'no' - would you like a diagnosis?"
-    
-    def _handle_disambiguate_phase(self, text: str) -> str:
-        """Handle disease disambiguation (future enhancement)."""
-        # This is where you'd ask about unique symptoms to differentiate between diseases
-        # For now, just return to explanation
-        self.state.phase = Phase.EXPLAIN
-        return "Thank you for the additional information."
     
     def run_cli(self):
         """Run chatbot in CLI mode for testing."""
