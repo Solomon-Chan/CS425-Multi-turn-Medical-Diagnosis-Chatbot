@@ -4,22 +4,16 @@
     "symptoms": {
       "primary": [
         "headache",
-        "severe headache",
-        "persistent headache",
-        "morning headache",
         "dizziness",
-        "blurred vision",
+        "double vision",
         "chest pain"
       ],
       "secondary": [
         "fatigue",
         "nosebleed",
         "shortness of breath",
-        "difficulty breathing",
         "irregular heartbeat",
-        "blood in urine",
-        "pounding in chest",
-        "vision problems"
+        "blood in urine"
       ]
     },
     "min_match": 2,
@@ -30,23 +24,20 @@
     "full_name": "Upper Respiratory Tract Infection",
     "symptoms": {
       "primary": [
-        "runny nose",
         "nasal congestion",
-        "stuffy nose",
         "sore throat",
         "cough",
         "sneezing"
       ],
       "secondary": [
         "hoarse voice",
-        "mild fever",
-        "low grade fever",
-        "post nasal drip",
-        "watery eyes",
-        "mild headache",
-        "body aches",
+        "fever",
+        "drainage in throat",
+        "lacrimation",
+        "headache",
+        "ache all over",
         "fatigue",
-        "loss of appetite"
+        "decreased appetite"
       ]
     },
     "min_match": 2,
@@ -57,29 +48,22 @@
     "full_name": "Depression or Anxiety",
     "symptoms": {
       "primary": [
-        "persistent sadness",
-        "loss of interest",
-        "excessive worry",
-        "feeling anxious",
-        "panic attacks",
-        "feeling hopeless",
-        "nervousness"
+        "depression",
+        "anxiety and nervousness",
+        "low self-esteem"
       ],
       "secondary": [
         "fatigue",
-        "sleep problems",
         "insomnia",
-        "difficulty sleeping",
         "restlessness",
-        "difficulty concentrating",
-        "irritability",
-        "changes in appetite",
-        "muscle tension",
-        "rapid heartbeat",
-        "sweating"
+        "excessive anger",
+        "palpitations",
+        "sweating",
+        "decreased appetite",
+        "excessive appetite"
       ]
     },
-    "min_match": 2,
+    "min_match": 1,
     "description": "Depression and anxiety are mental health conditions that can significantly impact daily functioning. Depression is characterized by persistent sadness, loss of interest in activities, and feelings of hopelessness. Anxiety involves excessive worry, nervousness, and physical symptoms like rapid heartbeat and muscle tension. These conditions often occur together and can affect sleep, appetite, concentration, and energy levels. Both are treatable with appropriate professional support.",
     "recommendation": "Don't isolate yourself - maintain social connections even when you don't feel like it. Avoid self-medicating with alcohol or drugs, as these can worsen symptoms and interfere with treatment. Don't ignore or dismiss your symptoms - mental health is as important as physical health. Avoid making major life decisions when feeling severely depressed or anxious. Don't skip therapy appointments or stop taking prescribed medications without consulting your healthcare provider. Avoid excessive caffeine, which can increase anxiety symptoms. Don't hesitate to reach out for help if you're having thoughts of self-harm."
   },
@@ -88,21 +72,16 @@
     "symptoms": {
       "primary": [
         "back pain",
-        "lower back pain",
-        "upper back pain",
-        "sharp back pain",
-        "chronic back pain",
-        "muscle ache in back"
+        "lower abdominal pain",
+        "lower body pain"
       ],
       "secondary": [
-        "stiffness",
-        "limited range of motion",
-        "difficulty standing",
-        "pain radiating down leg",
-        "numbness in legs",
-        "tingling",
-        "muscle spasms",
-        "pain worsens with movement"
+        "low back stiffness or tightness",
+        "back cramps or spasms",
+        "leg pain",
+        "leg weakness",
+        "paresthesia",
+        "back weakness"
       ]
     },
     "min_match": 1,
@@ -114,47 +93,32 @@
     "symptoms": {
       "primary": [
         "joint pain",
-        "joint stiffness",
-        "swollen joints",
-        "joint swelling",
-        "morning stiffness"
+        "joint stiffness or tightness",
+        "joint swelling"
       ],
       "secondary": [
-        "reduced range of motion",
-        "joint warmth",
-        "joint redness",
         "fatigue",
-        "difficulty moving joints",
-        "joint tenderness",
-        "decreased flexibility",
-        "pain worsens with activity"
+        "muscle stiffness or tightness",
+        "muscle weakness"
       ]
     },
     "min_match": 2,
-    "description": "Arthritis is inflammation of one or more joints, causing pain, swelling, stiffness, and decreased range of motion. The two most common types are osteoarthritis (wear-and-tear damage to joint cartilage) and rheumatoid arthritis (an autoimmune condition). Symptoms often worsen with age and can significantly impact daily activities. Morning stiffness lasting more than 30 minutes is common, particularly in inflammatory types of arthritis.",
+    "description": "Arthritis is inflammation of one or more joints, causing pain, stiffness, and swelling. The two most common types are osteoarthritis (wear-and-tear damage to joint cartilage) and rheumatoid arthritis (an autoimmune condition). Symptoms typically worsen with age and may include joint pain, stiffness (especially in the morning), swelling, redness, and decreased range of motion. Arthritis can affect any joint but commonly impacts hands, knees, hips, and spine.",
     "recommendation": "Avoid high-impact activities that put excessive stress on affected joints, such as running or jumping. Don't remain sedentary - gentle, regular exercise is important for maintaining joint flexibility and strength. Avoid repetitive movements that strain affected joints. Don't ignore sudden increases in pain, swelling, or warmth in joints. Avoid gaining excess weight, as this puts additional stress on weight-bearing joints. Don't apply heat to acutely swollen joints - use ice instead. Avoid activities that require tight gripping if you have hand arthritis."
   },
   "dermatitis": {
     "full_name": "Dermatitis",
     "symptoms": {
       "primary": [
-        "rash",
-        "itchy skin",
-        "itching",
-        "red skin",
-        "skin redness",
-        "dry skin"
+        "skin rash",
+        "itching of skin",
+        "skin dryness"
       ],
       "secondary": [
-        "swelling of skin",
-        "blisters",
-        "oozing",
-        "crusting",
-        "flaking skin",
-        "scaling",
-        "skin burning",
-        "skin irritation",
-        "thickened skin"
+        "skin swelling",
+        "skin peeling",
+        "scaly skin",
+        "skin irritation"
       ]
     },
     "min_match": 2,
@@ -166,21 +130,17 @@
     "symptoms": {
       "primary": [
         "ear pain",
-        "earache",
-        "hearing loss",
-        "difficulty hearing",
-        "ear discharge",
-        "fluid from ear"
+        "diminished hearing",
+        "fluid in ear",
+        "pus draining from ear"
       ],
       "secondary": [
         "fever",
-        "irritability",
-        "difficulty sleeping",
-        "tugging at ear",
-        "loss of appetite",
+        "insomnia",
+        "pulling at ears",
+        "decreased appetite",
         "headache",
-        "dizziness",
-        "balance problems"
+        "dizziness"
       ]
     },
     "min_match": 1,
@@ -191,23 +151,16 @@
     "full_name": "Diabetes",
     "symptoms": {
       "primary": [
-        "increased thirst",
-        "excessive thirst",
+        "thirst",
         "frequent urination",
-        "extreme hunger",
-        "unexplained weight loss",
-        "blurred vision"
+        "excessive appetite",
+        "recent weight loss",
+        "double vision"
       ],
       "secondary": [
         "fatigue",
-        "slow healing sores",
-        "frequent infections",
-        "tingling in hands",
-        "tingling in feet",
-        "numbness in hands",
-        "numbness in feet",
-        "dry skin",
-        "darkened skin patches"
+        "paresthesia",
+        "skin dryness"
       ]
     },
     "min_match": 2,
@@ -218,20 +171,17 @@
     "full_name": "Urinary Tract Infection",
     "symptoms": {
       "primary": [
-        "burning urination",
         "painful urination",
         "frequent urination",
-        "urgent need to urinate",
-        "cloudy urine",
         "blood in urine"
       ],
       "secondary": [
-        "strong smelling urine",
+        "unusual color or odor to urine",
         "pelvic pain",
         "lower abdominal pain",
         "fever",
         "fatigue",
-        "pressure in lower abdomen"
+        "suprapubic pain"
       ]
     },
     "min_match": 2,
@@ -243,21 +193,18 @@
     "symptoms": {
       "primary": [
         "sneezing",
-        "itchy eyes",
-        "watery eyes",
-        "runny nose",
-        "nasal congestion",
-        "itchy nose"
+        "itchiness of eye",
+        "lacrimation",
+        "nasal congestion"
       ],
       "secondary": [
-        "post nasal drip",
+        "drainage in throat",
         "cough",
-        "itchy throat",
-        "sinus pressure",
+        "throat irritation",
+        "painful sinuses",
         "facial pain",
         "fatigue",
-        "skin rash",
-        "hives"
+        "skin rash"
       ]
     },
     "min_match": 2,

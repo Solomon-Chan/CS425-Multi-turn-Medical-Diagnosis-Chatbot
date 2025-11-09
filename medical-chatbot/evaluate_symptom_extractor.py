@@ -175,7 +175,11 @@ def parse_args() -> argparse.Namespace:
         description="Evaluate SentenceTransformer-based symptom extraction",
     )
 
-    default_model = PROJECT_ROOT / "models" / "medical_symptom_matcher"
+    # # original sentence transformer
+    # default_model = PROJECT_ROOT / "models" / "transformer_original" / "medical_symptom_matcher"
+    # updated sentence transformer
+    default_model = PROJECT_ROOT / "models" / "transformer_updated" / "sentencetransformer_package" / "sentence_transformer_best"
+    
     default_data = PROJECT_ROOT / "data" / "auto_labeled.jsonl"
     default_symptoms = PROJECT_ROOT / "data" / "symptoms.csv"
 
