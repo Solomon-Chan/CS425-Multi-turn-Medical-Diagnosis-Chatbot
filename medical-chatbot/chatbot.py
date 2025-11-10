@@ -358,7 +358,7 @@ def create_chatbot():
     print()
 
     print("Loading intent classifier...")
-    intent_model = spacy.load("models/intent_model_e3_v3")
+    intent_model = spacy.load("models/intent_model_e3_v5")
     print("✓ Intent model loaded\n")
     
     # Create chatbot
