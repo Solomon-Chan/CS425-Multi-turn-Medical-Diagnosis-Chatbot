@@ -31,7 +31,7 @@ class MLSymptomExtractor:
     
     def __init__(self, 
                 #  model_path: str = 'models/transformer_original/medical_symptom_matcher',
-                 model_path: str = 'models\\transformer_updated\\sentencetransformer_package\\sentence_transformer_best',
+                 model_path: str = 'models/transformer_updated',
                  symptoms_path: str = 'data/symptoms.csv',
                  threshold: float = 0.5,
                  top_k: int = 5):
