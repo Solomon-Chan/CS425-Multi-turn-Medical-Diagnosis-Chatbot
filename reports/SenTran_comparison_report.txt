@@ -1,0 +1,17 @@
+[BASE MODEL METRICS]
+macro_precision: 0.7129
+macro_recall: 0.5463
+macro_f1: 0.3922
+micro_precision: 0.4715
+micro_recall: 0.4715
+micro_f1: 0.4715
+avg_loss: 0.3307
+
+[FINE-TUNED MODEL METRICS]
+macro_precision: 0.9146
+macro_recall: 0.9086
+macro_f1: 0.9112
+micro_precision: 0.9142
+micro_recall: 0.9142
+micro_f1: 0.9142
+avg_loss: 0.0716
