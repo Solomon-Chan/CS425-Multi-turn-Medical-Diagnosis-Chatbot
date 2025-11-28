@@ -30,7 +30,8 @@ class MLSymptomExtractor:
     """ML-based symptom extraction using fine-tuned SentenceTransformer."""
     
     def __init__(self, 
-                 model_path: str = 'models/medical_symptom_matcher',
+                #  model_path: str = 'models/transformer_original/medical_symptom_matcher',
+                 model_path: str = 'models/transformer_updated',
                  symptoms_path: str = 'data/symptoms.csv',
                  threshold: float = 0.5,
                  top_k: int = 5):

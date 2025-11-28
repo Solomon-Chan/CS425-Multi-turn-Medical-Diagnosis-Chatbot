@@ -8,3 +8,7 @@
 `npm run dev`
 `cd ../chatbot`
 `python server.py`
+
+3. Run chatbot using CLI
+'cd medical-chatbot'
+'python chatbot.py'
